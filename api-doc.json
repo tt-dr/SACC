@@ -1,0 +1,579 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SACC API",
+    "version": "1.0.0",
+    "description": "南邮计软院科协官网后端接口文档"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "本地开发"
+    },
+    {
+      "url": "http://123.56.221.147:8080",
+      "description": "生产服务器"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": ["健康检查"],
+        "summary": "存活探测",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": { "status": "ok", "time": "2026-07-16T12:00:00Z" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": ["健康检查"],
+        "summary": "就绪检查",
+        "responses": {
+          "200": {
+            "description": "所有服务就绪",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReadyResponse" },
+                "example": { "status": "ready", "checks": { "mysql": "up", "redis": "up" }, "time": "2026-07-16T12:00:00Z" }
+              }
+            }
+          },
+          "503": {
+            "description": "部分服务不可用",
+            "content": {
+              "application/json": {
+                "example": { "status": "degraded", "checks": { "mysql": "down", "redis": "up" }, "time": "2026-07-16T12:00:00Z" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/bootstrap": {
+      "get": {
+        "tags": ["公开接口"],
+        "summary": "站点配置",
+        "description": "官网前台启动时调用，获取站点基本配置。失败时前端使用本地兜底数据。",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BootstrapResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "管理员登录",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" },
+              "example": { "username": "admin", "password": "admin123" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LoginResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "请求体格式错误",
+            "content": { "application/json": { "example": { "message": "invalid request payload" } } }
+          },
+          "401": {
+            "description": "用户名或密码错误",
+            "content": { "application/json": { "example": { "message": "invalid username or password" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/upload": {
+      "post": {
+        "tags": ["管理接口"],
+        "summary": "上传图片",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "图片文件" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "上传成功",
+            "content": {
+              "application/json": {
+                "example": { "data": { "url": "/images/a1b2c3d4.png", "filename": "a1b2c3d4.png", "size": 123456, "uploadedAt": "2026-07-16T12:00:00Z" } }
+              }
+            }
+          },
+          "400": { "description": "文件过大/格式不支持", "content": { "application/json": { "example": { "message": "文件过大，最大 10MB" } } } }
+        }
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "用户列表",
+        "security": [{ "bearerAuth": [] }],
+        "description": "仅超级管理员可访问",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserListResponse" } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "创建用户",
+        "security": [{ "bearerAuth": [] }],
+        "description": "仅超级管理员可访问",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUserRequest" },
+              "example": { "username": "newuser", "displayName": "新成员", "password": "pass123", "role": "editor" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "创建成功" },
+          "400": { "description": "参数错误(用户名已存在/必填为空)", "content": { "application/json": { "example": { "message": "username already exists" } } } }
+        }
+      }
+    },
+    "/api/v1/admin/users/{id}": {
+      "put": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "修改用户",
+        "security": [{ "bearerAuth": [] }],
+        "description": "修改用户名/显示名/角色/密码(留空不修改)，仅超级管理员可访问",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" },
+              "example": { "role": "super_admin" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "修改成功" },
+          "400": { "description": "参数错误" }
+        }
+      },
+      "delete": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "禁用用户",
+        "security": [{ "bearerAuth": [] }],
+        "description": "软删除(设 status=disabled)，仅超级管理员可访问",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "禁用成功", "content": { "application/json": { "example": { "message": "user disabled" } } } }
+        }
+      }
+    },
+    "/api/v1/admin/password": {
+      "put": {
+        "tags": ["管理接口"],
+        "summary": "修改密码",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" },
+              "example": { "oldPassword": "admin123", "newPassword": "newPassword456" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "修改成功",
+            "content": { "application/json": { "example": { "message": "password changed" } } }
+          },
+          "400": {
+            "description": "请求体格式错误",
+            "content": { "application/json": { "example": { "message": "invalid request payload" } } }
+          },
+          "401": {
+            "description": "Token无效 或 旧密码不正确",
+            "content": { "application/json": { "example": { "message": "invalid old password" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/me": {
+      "get": {
+        "tags": ["管理接口"],
+        "summary": "获取当前用户信息",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MeResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Token无效或已过期",
+            "content": { "application/json": { "example": { "message": "unauthorized" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/content": {
+      "get": {
+        "tags": ["公开接口"],
+        "summary": "公开内容列表",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 }, "description": "页码" },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 }, "description": "每页条数" },
+          { "name": "module", "in": "query", "schema": { "type": "string" }, "description": "模块: news / docs / projects" },
+          { "name": "status", "in": "query", "schema": { "type": "string" }, "description": "状态: draft / published / archived" },
+          { "name": "keyword", "in": "query", "schema": { "type": "string" }, "description": "模糊搜索(标题/摘要/作者)" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContentListResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/content/{id}": {
+      "get": {
+        "tags": ["公开接口"],
+        "summary": "获取单条公开内容",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容ID" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
+          },
+          "400": { "description": "ID格式错误", "content": { "application/json": { "example": { "message": "invalid id" } } } },
+          "404": { "description": "内容不存在", "content": { "application/json": { "example": { "message": "content not found" } } } }
+        }
+      }
+    },
+    "/api/v1/admin/content": {
+      "get": {
+        "tags": ["管理接口"],
+        "summary": "管理端内容列表",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "module", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "keyword", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentListResponse" } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["管理接口"],
+        "summary": "创建内容",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpsertContentRequest" },
+              "example": {
+                "module": "docs",
+                "title": "新成员上手指南",
+                "summary": "从环境搭建到第一次贡献的完整流程",
+                "body": "# 新成员上手指南\n## 环境搭建\n...",
+                "tags": ["入门", "指南"],
+                "status": "published",
+                "author": "Super Admin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
+          },
+          "400": {
+            "description": "参数校验失败",
+            "content": { "application/json": { "example": { "message": "failed to create content item" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/content/{id}": {
+      "put": {
+        "tags": ["管理接口"],
+        "summary": "更新内容",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容ID" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpsertContentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
+          },
+          "400": {
+            "description": "参数校验失败或记录不存在",
+            "content": { "application/json": { "example": { "message": "failed to update content item" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "通过 POST /api/v1/auth/login 获取 Token"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "time": { "type": "string", "format": "date-time", "example": "2026-07-16T12:00:00Z" }
+        }
+      },
+      "ReadyResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ready" },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "mysql": { "type": "string", "example": "up" },
+              "redis": { "type": "string", "example": "up" }
+            }
+          },
+          "time": { "type": "string", "format": "date-time", "example": "2026-07-16T12:00:00Z" }
+        }
+      },
+      "BootstrapResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "site": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "example": "SACC" },
+                  "fullName": { "type": "string", "example": "Science Association of Computer College" },
+                  "tagline": { "type": "string", "example": "探索科学之美，创造技术未来，成就卓越人生" },
+                  "domain": { "type": "string", "example": "sacchome.ttdr.top.ttdr.top" },
+                  "publicIp": { "type": "string", "example": "123.56.221.147" },
+                  "email": { "type": "string", "example": "hello@sacchome.ttdr.top.ttdr.top" },
+                  "logoUrl": { "type": "string", "example": "/image.png" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "admin" },
+          "password": { "type": "string", "example": "admin123" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIs..." },
+              "expiresIn": { "type": "integer", "example": 43200, "description": "Token有效期(秒)" },
+              "userId": { "type": "integer", "example": 1 },
+              "username": { "type": "string", "example": "admin" },
+              "displayName": { "type": "string", "example": "Super Admin" },
+              "role": { "type": "string", "example": "super_admin", "description": "super_admin 或 editor" }
+            }
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": ["oldPassword", "newPassword"],
+        "properties": {
+          "oldPassword": { "type": "string", "example": "admin123" },
+          "newPassword": { "type": "string", "example": "newPassword456" }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "userId": { "type": "integer", "example": 1 },
+              "username": { "type": "string", "example": "admin" },
+              "role": { "type": "string", "example": "super_admin" }
+            }
+          }
+        }
+      },
+      "ContentItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "module": { "type": "string", "example": "news", "description": "news / docs / projects" },
+          "slug": { "type": "string", "example": "server-components-notes" },
+          "title": { "type": "string", "example": "标题" },
+          "summary": { "type": "string", "example": "摘要" },
+          "body": { "type": "string", "example": "## Markdown正文" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["React", "性能"] },
+          "status": { "type": "string", "example": "published", "enum": ["draft", "published", "archived"] },
+          "author": { "type": "string", "example": "林嘉禾" },
+          "publishedAt": { "type": "string", "format": "date-time", "nullable": true, "example": "2026-04-06T00:00:00Z" },
+          "createdAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z" },
+          "updatedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z" }
+        }
+      },
+      "ContentItemResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "$ref": "#/components/schemas/ContentItem" }
+        }
+      },
+      "ContentListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ContentItem" }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": { "type": "integer", "example": 1 },
+              "pageSize": { "type": "integer", "example": 20 },
+              "total": { "type": "integer", "example": 1 }
+            }
+          }
+        }
+      },
+      "UserItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "username": { "type": "string", "example": "admin" },
+          "displayName": { "type": "string", "example": "Super Admin" },
+          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"] },
+          "status": { "type": "string", "example": "active" },
+          "createdAt": { "type": "string", "example": "2026-01-15T00:00:00Z" }
+        }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/UserItem" } }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "newuser" },
+          "displayName": { "type": "string", "example": "新成员" },
+          "password": { "type": "string", "example": "pass123" },
+          "role": { "type": "string", "example": "editor", "enum": ["super_admin", "editor"] }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "username": { "type": "string", "example": "newadmin" },
+          "displayName": { "type": "string", "example": "新名字" },
+          "password": { "type": "string", "example": "newpass", "description": "留空则不修改" },
+          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"] }
+        }
+      },
+      "UpsertContentRequest": {
+        "type": "object",
+        "required": ["module", "title"],
+        "properties": {
+          "module": { "type": "string", "example": "news", "description": "news / docs / projects" },
+          "title": { "type": "string", "example": "标题" },
+          "slug": { "type": "string", "example": "my-slug", "description": "留空则从title自动生成" },
+          "summary": { "type": "string", "example": "摘要" },
+          "body": { "type": "string", "example": "## Markdown正文" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["React"] },
+          "status": { "type": "string", "example": "draft", "enum": ["draft", "published", "archived"] },
+          "author": { "type": "string", "example": "林嘉禾" },
+          "publishedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T00:00:00Z" }
+        }
+      }
+    }
+  }
+}
