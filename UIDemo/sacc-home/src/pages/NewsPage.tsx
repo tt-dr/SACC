@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { ArrowRight, CalendarDays, Clock, Search, Users } from 'lucide-react'
+import { ArrowRight, CalendarDays, Search, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SiteLayout from '../components/site/SiteLayout'
 import { useSiteData } from '../context/SiteDataContext'
@@ -99,7 +99,6 @@ function NewsPage() {
                       <strong>{item.author}</strong>
                       {'role' in item && item.role ? <span>{item.role}</span> : null}
                     </div>
-                    <span className="blog-category">{item.category}</span>
                   </div>
 
                   <h3 className="blog-card-title">{item.title}</h3>
@@ -119,12 +118,6 @@ function NewsPage() {
                     <span className="blog-foot-meta">
                       <CalendarDays size={14} strokeWidth={2.2} />
                       {formatDisplayDate(item.date)}
-                      {'readMinutes' in item && item.readMinutes ? (
-                        <>
-                          <Clock size={14} strokeWidth={2.2} />
-                          {item.readMinutes} 分钟
-                        </>
-                      ) : null}
                     </span>
                     <span className="blog-read-link">
                       阅读
