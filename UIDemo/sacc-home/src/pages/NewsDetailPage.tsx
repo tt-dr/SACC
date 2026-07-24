@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ArrowLeft, CalendarDays, Clock, FileText, Hash, ListTree, PenLine } from 'lucide-react'
+import { ArrowLeft, CalendarDays, FileText, Hash, ListTree, PenLine } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import MarkdownContent from '../components/site/MarkdownContent'
 import SiteLayout from '../components/site/SiteLayout'
@@ -35,12 +35,6 @@ function NewsDetailPage() {
             {item.role ? ` · ${item.role}` : ''}
             <CalendarDays size={15} strokeWidth={2.2} />
             {formatDisplayDate(item.date)}
-            {item.readMinutes ? (
-              <>
-                <Clock size={15} strokeWidth={2.2} />
-                {item.readMinutes} 分钟
-              </>
-            ) : null}
           </p>
         </div>
       </section>
@@ -72,7 +66,6 @@ function NewsDetailPage() {
 
           <article className="doc-content">
             <div className="doc-content-meta">
-              <span className="doc-content-chip">{item.category}</span>
               <span>发布于 {formatDisplayDate(item.date)}</span>
             </div>
 
