@@ -2,32 +2,23 @@
   "openapi": "3.0.3",
   "info": {
     "title": "SACC API",
-    "version": "1.0.0",
-    "description": "南邮计软院科协官网后端接口文档"
+    "version": "2.0.0",
+    "description": "南邮计软院科协官网后端接口文档。所有接口均以 JSON 交互，时间字段统一使用 ISO 8601 格式（如 2026-04-06T20:10:00Z）。前端以 GET /api/v1/public/bootstrap 为唯一数据入口获取全部站点配置，失败时回退到本地兜底数据。"
   },
   "servers": [
-    {
-      "url": "http://localhost:8080",
-      "description": "本地开发"
-    },
-    {
-      "url": "http://123.56.221.147:8080",
-      "description": "生产服务器"
-    }
+    { "url": "http://localhost:8080", "description": "本地开发环境" },
+    { "url": "http://123.56.221.147:8080", "description": "生产服务器" }
   ],
-  "security": [
-    {
-      "bearerAuth": []
-    }
-  ],
+  "security": [{ "bearerAuth": [] }],
   "paths": {
     "/healthz": {
       "get": {
         "tags": ["健康检查"],
         "summary": "存活探测",
+        "description": "Kubernetes / Docker 健康检查端点，返回服务是否存活。不依赖任何外部服务。",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "服务存活",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
@@ -42,9 +33,10 @@
       "get": {
         "tags": ["健康检查"],
         "summary": "就绪检查",
+        "description": "检查所有依赖服务（MySQL、Redis）是否就绪。上游负载均衡器据此判断是否将流量路由到该实例。",
         "responses": {
           "200": {
-            "description": "所有服务就绪",
+            "description": "所有依赖服务就绪",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ReadyResponse" },
@@ -53,7 +45,7 @@
             }
           },
           "503": {
-            "description": "部分服务不可用",
+            "description": "部分依赖服务不可用 — 负载均衡器应停止向该实例路由流量",
             "content": {
               "application/json": {
                 "example": { "status": "degraded", "checks": { "mysql": "down", "redis": "up" }, "time": "2026-07-16T12:00:00Z" }
@@ -65,15 +57,15 @@
     },
     "/api/v1/public/bootstrap": {
       "get": {
-        "tags": ["公开接口"],
-        "summary": "站点配置",
-        "description": "官网前台启动时调用，获取站点基本配置。失败时前端使用本地兜底数据。",
+        "tags": ["公开接口 - 站点数据"],
+        "summary": "获取站点完整配置（前端唯一数据入口）",
+        "description": "官网前台启动时调用，返回全部站点配置数据。此接口是前端获取站点信息的唯一入口，返回结构必须与前端 fallbackSiteContent 完全一致。前端在请求失败时自动回退到本地兜底数据。缓存建议：Redis 缓存 5 分钟（key: site:bootstrap），内容变更时主动失效。",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "站点完整配置数据",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BootstrapResponse" }
+                "schema": { "$ref": "#/components/schemas/BootstrapData" }
               }
             }
           }
@@ -82,47 +74,56 @@
     },
     "/api/v1/public/members": {
       "get": {
-        "tags": ["公开接口"],
-        "summary": "成员列表",
-        "description": "获取所有社团成员信息，包括头像、姓名、社团职务、一句话描述和所属分组。供官网「关于我们」页面成员模块使用。",
+        "tags": ["公开接口 - 站点数据"],
+        "summary": "获取成员列表",
+        "description": "返回所有社团成员信息，按分组归类。供官网「关于我们」页面成员模块使用。注意：前端当前使用 bootstrap 接口中 about.members.groups 字段获取成员数据，此接口为独立查询场景预留。缓存建议同 bootstrap。",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/MemberListResponse" },
-                "example": {
-                  "data": [
-                    {
-                      "id": 1,
-                      "displayName": "周亦晨",
-                      "avatar": "/uploads/avatars/zhouyichen.png",
-                      "position": "执行主席",
-                      "desc": "统筹全局，确保每一件事都有闭环。",
-                      "group": "主席团"
-                    },
-                    {
-                      "id": 2,
-                      "displayName": "林嘉禾",
-                      "avatar": "/uploads/avatars/linjiahe.png",
-                      "position": "前端组组长",
-                      "desc": "官网、组件库、工程化，一砖一瓦建起来。",
-                      "group": "前端组"
-                    },
-                    {
-                      "id": 3,
-                      "displayName": "张轩铭",
-                      "avatar": "/uploads/avatars/default.png",
-                      "position": "组员",
-                      "desc": "",
-                      "group": "办公室"
-                    }
-                  ],
-                  "groups": ["主席团", "办公室", "赛事部", "新媒体", "前端组", "后端组", "安全组", "Python组", "算法组"]
-                }
+                "schema": { "$ref": "#/components/schemas/MemberListResponse" }
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/content": {
+      "get": {
+        "tags": ["公开接口 - 内容"],
+        "summary": "公开内容列表",
+        "description": "获取已发布内容的列表。**不包含正文 body**，列表仅返回标题、摘要、作者、标签等元信息。获取正文请调用 GET /api/v1/content/{id}。支持分页、按模块筛选和关键词搜索。",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 }, "description": "页码，从 1 开始" },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 }, "description": "每页条数，最大 100" },
+          { "name": "module", "in": "query", "schema": { "type": "string", "enum": ["news", "docs", "projects"] }, "description": "内容模块筛选" },
+          { "name": "status", "in": "query", "schema": { "type": "string", "default": "published" }, "description": "公开接口仅返回 published 状态的内容" },
+          { "name": "keyword", "in": "query", "schema": { "type": "string" }, "description": "模糊搜索：匹配 title / summary / author / tags" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentListResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/content/{id}": {
+      "get": {
+        "tags": ["公开接口 - 内容"],
+        "summary": "获取单条内容详情",
+        "description": "根据 ID 获取单条内容的完整信息，**包含正文 body**。仅返回 status=published 的内容。",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容 ID" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
+          },
+          "400": { "description": "ID 格式错误", "content": { "application/json": { "example": { "message": "invalid content id" } } } },
+          "404": { "description": "内容不存在或未发布", "content": { "application/json": { "example": { "message": "content not found" } } } }
         }
       }
     },
@@ -130,6 +131,7 @@
       "post": {
         "tags": ["认证"],
         "summary": "管理员登录",
+        "description": "使用用户名和密码换取 JWT Token。Token 有效期 12 小时（43200 秒）。前端将 Token 存入 sessionStorage，每次请求通过 Authorization: Bearer <token> 携带。",
         "requestBody": {
           "required": true,
           "content": {
@@ -141,128 +143,43 @@
         },
         "responses": {
           "200": {
-            "description": "登录成功",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/LoginResponse" }
-              }
-            }
+            "description": "登录成功，返回 JWT Token 和用户基本信息",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } }
           },
           "400": {
-            "description": "请求体格式错误",
-            "content": { "application/json": { "example": { "message": "invalid request payload" } } }
+            "description": "请求体格式错误（如缺少 username 或 password）",
+            "content": { "application/json": { "example": { "message": "请求参数不完整，需要 username 和 password" } } }
           },
           "401": {
             "description": "用户名或密码错误",
-            "content": { "application/json": { "example": { "message": "invalid username or password" } } }
+            "content": { "application/json": { "example": { "message": "用户名或密码不正确" } } }
           }
         }
       }
     },
-    "/api/v1/admin/upload": {
-      "post": {
-        "tags": ["管理接口"],
-        "summary": "上传图片",
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": { "type": "string", "format": "binary", "description": "图片文件" }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "上传成功",
-            "content": {
-              "application/json": {
-                "example": { "data": { "url": "/images/a1b2c3d4.png", "filename": "a1b2c3d4.png", "size": 123456, "uploadedAt": "2026-07-16T12:00:00Z" } }
-              }
-            }
-          },
-          "400": { "description": "文件过大/格式不支持", "content": { "application/json": { "example": { "message": "文件过大，最大 10MB" } } } }
-        }
-      }
-    },
-    "/api/v1/admin/users": {
+    "/api/v1/admin/me": {
       "get": {
-        "tags": ["管理接口 - 用户"],
-        "summary": "用户列表",
+        "tags": ["管理接口 - 认证"],
+        "summary": "获取当前登录用户信息",
+        "description": "用于前端验证 Token 有效性并刷新用户信息。每次加载管理端页面时调用。若 Token 无效或过期返回 401，前端自动跳转登录页。",
         "security": [{ "bearerAuth": [] }],
-        "description": "仅超级管理员可访问",
         "responses": {
           "200": {
             "description": "OK",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserListResponse" } } }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MeResponse" } } }
+          },
+          "401": {
+            "description": "Token 无效或已过期 — 前端应跳转到登录页",
+            "content": { "application/json": { "example": { "message": "未登录或 Token 已过期，请重新登录" } } }
           }
-        }
-      },
-      "post": {
-        "tags": ["管理接口 - 用户"],
-        "summary": "创建用户",
-        "security": [{ "bearerAuth": [] }],
-        "description": "仅超级管理员可访问",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateUserRequest" },
-              "example": { "username": "newuser", "displayName": "新成员", "password": "pass123", "role": "editor" }
-            }
-          }
-        },
-        "responses": {
-          "201": { "description": "创建成功" },
-          "400": { "description": "参数错误(用户名已存在/必填为空)", "content": { "application/json": { "example": { "message": "username already exists" } } } }
-        }
-      }
-    },
-    "/api/v1/admin/users/{id}": {
-      "put": {
-        "tags": ["管理接口 - 用户"],
-        "summary": "修改用户",
-        "security": [{ "bearerAuth": [] }],
-        "description": "修改用户名/显示名/角色/密码(留空不修改)，仅超级管理员可访问",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" },
-              "example": { "role": "super_admin" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "修改成功" },
-          "400": { "description": "参数错误" }
-        }
-      },
-      "delete": {
-        "tags": ["管理接口 - 用户"],
-        "summary": "禁用用户",
-        "security": [{ "bearerAuth": [] }],
-        "description": "软删除(设 status=disabled)，仅超级管理员可访问",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
-        ],
-        "responses": {
-          "200": { "description": "禁用成功", "content": { "application/json": { "example": { "message": "user disabled" } } } }
         }
       }
     },
     "/api/v1/admin/password": {
       "put": {
-        "tags": ["管理接口"],
-        "summary": "修改密码",
+        "tags": ["管理接口 - 认证"],
+        "summary": "修改当前用户密码",
+        "description": "需要提供旧密码验证身份。新密码长度不低于 6 位。修改成功后不失效当前 Token。",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -274,106 +191,145 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "修改成功",
-            "content": { "application/json": { "example": { "message": "password changed" } } }
-          },
-          "400": {
-            "description": "请求体格式错误",
-            "content": { "application/json": { "example": { "message": "invalid request payload" } } }
-          },
-          "401": {
-            "description": "Token无效 或 旧密码不正确",
-            "content": { "application/json": { "example": { "message": "invalid old password" } } }
-          }
+          "200": { "description": "修改成功", "content": { "application/json": { "example": { "message": "密码已修改" } } } },
+          "400": { "description": "请求体格式错误", "content": { "application/json": { "example": { "message": "请求参数不完整" } } } },
+          "401": { "description": "Token 无效 或 旧密码不正确", "content": { "application/json": { "example": { "message": "旧密码不正确" } } } }
         }
       }
     },
-    "/api/v1/admin/me": {
+    "/api/v1/admin/upload": {
+      "post": {
+        "tags": ["管理接口 - 文件"],
+        "summary": "上传图片",
+        "description": "上传图片文件到服务器，返回可访问的 URL。支持 jpg / png / gif / webp 格式，单文件最大 10MB。返回的 URL 可直接用于管理端头像设置和内容编辑中的图片引用。",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "图片文件，支持 jpg/png/gif/webp，最大 10MB" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "上传成功，返回图片 URL",
+            "content": {
+              "application/json": {
+                "example": { "data": { "url": "/uploads/images/a1b2c3d4.png", "filename": "a1b2c3d4.png", "size": 123456, "uploadedAt": "2026-07-16T12:00:00Z" } }
+              }
+            }
+          },
+          "400": { "description": "文件过大 或 格式不支持", "content": { "application/json": { "example": { "message": "文件过大，最大支持 10MB" } } } },
+          "401": { "description": "未登录", "content": { "application/json": { "example": { "message": "未登录，请先登录" } } } }
+        }
+      }
+    },
+    "/api/v1/admin/users": {
       "get": {
-        "tags": ["管理接口"],
-        "summary": "获取当前用户信息",
+        "tags": ["管理接口 - 用户"],
+        "summary": "用户列表",
+        "description": "返回所有后台用户（含已禁用的）。仅超级管理员可访问。不返回密码字段。",
         "security": [{ "bearerAuth": [] }],
         "responses": {
           "200": {
             "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/MeResponse" }
-              }
-            }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserListResponse" } } }
           },
-          "401": {
-            "description": "Token无效或已过期",
-            "content": { "application/json": { "example": { "message": "unauthorized" } } }
+          "403": { "description": "无权限（非超级管理员）", "content": { "application/json": { "example": { "message": "仅超级管理员可访问用户管理" } } } }
+        }
+      },
+      "post": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "创建用户",
+        "description": "创建新管理员账号。username 为登录用户名（唯一），displayName 为真实姓名。position 为社团职务（如'前端组组长'），desc 为个人简介。仅超级管理员可操作。",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUserRequest" },
+              "example": { "username": "linjiahe", "displayName": "林嘉禾", "password": "pass123", "role": "editor", "position": "前端组组长", "desc": "官网、组件库、工程化，一砖一瓦建起来。", "avatar": "/uploads/avatars/linjiahe.png" }
+            }
           }
+        },
+        "responses": {
+          "201": { "description": "创建成功" },
+          "400": { "description": "参数错误（用户名已存在 / 必填字段为空）", "content": { "application/json": { "example": { "message": "用户名已存在" } } } },
+          "403": { "description": "无权限", "content": { "application/json": { "example": { "message": "仅超级管理员可创建用户" } } } }
         }
       }
     },
-    "/api/v1/content": {
-      "get": {
-        "tags": ["公开接口"],
-        "summary": "公开内容列表",
-        "description": "获取已发布内容的列表，不含正文 body。详情请使用 GET /api/v1/content/{id}。",
+    "/api/v1/admin/users/{id}": {
+      "put": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "修改用户",
+        "description": "修改用户信息。password 留空则不修改密码。role 为后台管理角色（super_admin / editor），position 为社团职务。仅超级管理员可操作。",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 }, "description": "页码" },
-          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 }, "description": "每页条数" },
-          { "name": "module", "in": "query", "schema": { "type": "string" }, "description": "模块: news / docs / projects" },
-          { "name": "status", "in": "query", "schema": { "type": "string" }, "description": "状态: draft / published / archived" },
-          { "name": "keyword", "in": "query", "schema": { "type": "string" }, "description": "模糊搜索(标题/摘要/作者)" }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "用户 ID" }
         ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ContentListResponse" }
-              }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" },
+              "example": { "displayName": "林嘉禾", "position": "前端组组长", "desc": "更新后的个人简介" }
             }
           }
+        },
+        "responses": {
+          "200": { "description": "修改成功" },
+          "400": { "description": "参数错误（用户不存在 / 用户名重复）", "content": { "application/json": { "example": { "message": "用户不存在" } } } },
+          "403": { "description": "无权限", "content": { "application/json": { "example": { "message": "仅超级管理员可修改用户" } } } }
         }
-      }
-    },
-    "/api/v1/content/{id}": {
-      "get": {
-        "tags": ["公开接口"],
-        "summary": "获取单条公开内容",
+      },
+      "delete": {
+        "tags": ["管理接口 - 用户"],
+        "summary": "禁用/删除用户",
+        "description": "软删除用户（设置 status=disabled）。禁用后该用户无法登录后台，但其创建的内容保留。仅超级管理员可操作。",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容ID" }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "用户 ID" }
         ],
         "responses": {
-          "200": {
-            "description": "OK",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
-          },
-          "400": { "description": "ID格式错误", "content": { "application/json": { "example": { "message": "invalid id" } } } },
-          "404": { "description": "内容不存在", "content": { "application/json": { "example": { "message": "content not found" } } } }
+          "200": { "description": "禁用成功", "content": { "application/json": { "example": { "message": "用户已禁用" } } } },
+          "400": { "description": "用户不存在", "content": { "application/json": { "example": { "message": "用户不存在" } } } },
+          "403": { "description": "无权限", "content": { "application/json": { "example": { "message": "仅超级管理员可删除用户" } } } }
         }
       }
     },
     "/api/v1/admin/content": {
       "get": {
-        "tags": ["管理接口"],
+        "tags": ["管理接口 - 内容"],
         "summary": "管理端内容列表",
-        "description": "获取内容列表（含草稿和已发布），不含正文 body。编辑正文请在管理端点击具体条目查看详情。",
+        "description": "返回所有状态的内容（包括 draft / published / archived）。**不包含正文 body**，编辑正文请通过管理端点击具体条目后调用 GET /api/v1/content/{id} 获取详情。支持分页、按模块筛选和关键词搜索。",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
-          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
-          { "name": "module", "in": "query", "schema": { "type": "string" } },
-          { "name": "status", "in": "query", "schema": { "type": "string" } },
-          { "name": "keyword", "in": "query", "schema": { "type": "string" } }
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 }, "description": "页码，从 1 开始" },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 }, "description": "每页条数，最大 100" },
+          { "name": "module", "in": "query", "schema": { "type": "string", "enum": ["news", "docs", "projects"] }, "description": "内容模块筛选" },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["draft", "published", "archived"] }, "description": "状态筛选，不传则返回全部" },
+          { "name": "keyword", "in": "query", "schema": { "type": "string" }, "description": "模糊搜索：匹配 title / summary / author / tags" }
         ],
         "responses": {
           "200": {
             "description": "OK",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentListResponse" } } }
-          }
+          },
+          "401": { "description": "未登录", "content": { "application/json": { "example": { "message": "未登录" } } } }
         }
       },
       "post": {
-        "tags": ["管理接口"],
+        "tags": ["管理接口 - 内容"],
         "summary": "创建内容",
+        "description": "创建一条新内容。module 必填（news / docs / projects）。slug 留空则从 title 自动生成拼音 slug。status 默认 draft。创建成功后写入审计日志。",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -381,13 +337,14 @@
             "application/json": {
               "schema": { "$ref": "#/components/schemas/UpsertContentRequest" },
               "example": {
-                "module": "docs",
+                "module": "news",
                 "title": "新成员上手指南",
                 "summary": "从环境搭建到第一次贡献的完整流程",
-                "body": "# 新成员上手指南\n## 环境搭建\n...",
+                "body": "# 新成员上手指南\n## 环境搭建\n安装 Node.js 与 pnpm...",
                 "tags": ["入门", "指南"],
                 "status": "published",
-                "author": "Super Admin"
+                "author": "林嘉禾",
+                "category": "工程实践"
               }
             }
           }
@@ -398,26 +355,26 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
           },
           "400": {
-            "description": "参数校验失败",
-            "content": { "application/json": { "example": { "message": "failed to create content item" } } }
-          }
+            "description": "参数校验失败（module 非法 / title 为空）",
+            "content": { "application/json": { "example": { "message": "module 字段非法，可选值：news / docs / projects" } } }
+          },
+          "401": { "description": "未登录" }
         }
       }
     },
     "/api/v1/admin/content/{id}": {
       "put": {
-        "tags": ["管理接口"],
+        "tags": ["管理接口 - 内容"],
         "summary": "更新内容",
+        "description": "更新指定 ID 的内容。可部分更新（只传需要修改的字段）。更新成功后写入审计日志并刷新 bootstrap 缓存。",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容ID" }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容 ID" }
         ],
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpsertContentRequest" }
-            }
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpsertContentRequest" } }
           }
         },
         "responses": {
@@ -425,10 +382,102 @@
             "description": "更新成功",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContentItemResponse" } } }
           },
-          "400": {
-            "description": "参数校验失败或记录不存在",
-            "content": { "application/json": { "example": { "message": "failed to update content item" } } }
+          "400": { "description": "参数校验失败 或 记录不存在", "content": { "application/json": { "example": { "message": "内容不存在" } } } },
+          "401": { "description": "未登录" }
+        }
+      },
+      "delete": {
+        "tags": ["管理接口 - 内容"],
+        "summary": "删除内容",
+        "description": "软删除指定 ID 的内容（设置 status=archived）。已删除的内容不会出现在公开列表中，但可在管理端查看。写入审计日志并刷新 bootstrap 缓存。",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "内容 ID" }
+        ],
+        "responses": {
+          "200": { "description": "删除成功", "content": { "application/json": { "example": { "message": "内容已删除" } } } },
+          "400": { "description": "内容不存在", "content": { "application/json": { "example": { "message": "内容不存在" } } } },
+          "401": { "description": "未登录" }
+        }
+      }
+    },
+    "/api/v1/admin/content/reorder": {
+      "put": {
+        "tags": ["管理接口 - 内容"],
+        "summary": "调整内容排序",
+        "description": "批量更新指定模块内内容的排列顺序。传入按新顺序排列的 ID 数组，后端按数组索引更新 sortOrder 字段。仅 docs 和 projects 模块支持拖拽排序。写入审计日志并刷新 bootstrap 缓存。",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReorderRequest" },
+              "example": { "module": "docs", "orderedIds": [1, 3, 2, 5, 4] }
+            }
           }
+        },
+        "responses": {
+          "200": { "description": "排序更新成功", "content": { "application/json": { "example": { "message": "排序已更新" } } } },
+          "400": { "description": "参数错误（module 为空 / orderedIds 为空 / ID 不存在）", "content": { "application/json": { "example": { "message": "orderedIds 不能为空" } } } },
+          "401": { "description": "未登录" }
+        }
+      }
+    },
+    "/api/v1/admin/dashboard": {
+      "get": {
+        "tags": ["管理接口 - 仪表盘"],
+        "summary": "获取仪表盘统计数据",
+        "description": "返回后台首页需要的汇总数据，包括站点访问量、成员数、各模块内容数量等。缓存建议：Redis 缓存 1 分钟。",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DashboardResponse" },
+                "example": {
+                  "data": {
+                    "siteVisits": 128460,
+                    "activeMembers": 312,
+                    "newsCount": 128,
+                    "docsCount": 32,
+                    "projectsCount": 24,
+                    "pendingNews": 4,
+                    "draftDocs": 8
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "未登录" }
+        }
+      }
+    },
+    "/api/v1/admin/audit-log": {
+      "get": {
+        "tags": ["管理接口 - 仪表盘"],
+        "summary": "获取操作审计日志",
+        "description": "返回最近的操作日志列表，按时间倒序。记录所有管理端的增/删/改操作，包含操作人、模块、动作和详情。用于仪表盘展示和问题追溯。",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 12 }, "description": "返回条数，默认 12，最大 50" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuditLogResponse" },
+                "example": {
+                  "data": [
+                    { "id": 1, "module": "news", "action": "create", "actor": "林嘉禾", "detail": "发布博客「性能优化实录」", "timestamp": "2026-04-06T20:10:00Z" },
+                    { "id": 2, "module": "docs", "action": "update", "actor": "Admin", "detail": "更新文档「项目概述」", "timestamp": "2026-04-05T11:20:00Z" }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "description": "未登录" }
         }
       }
     }
@@ -439,130 +488,349 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "通过 POST /api/v1/auth/login 获取 Token"
+        "description": "通过 POST /api/v1/auth/login 获取 Token。Token 有效期 12 小时。所有管理接口（/api/v1/admin/*）均需在请求头中携带：Authorization: Bearer <token>"
       }
     },
     "schemas": {
       "HealthResponse": {
         "type": "object",
+        "description": "存活检查响应",
         "properties": {
-          "status": { "type": "string", "example": "ok" },
-          "time": { "type": "string", "format": "date-time", "example": "2026-07-16T12:00:00Z" }
+          "status": { "type": "string", "example": "ok", "description": "固定返回 'ok'" },
+          "time": { "type": "string", "format": "date-time", "example": "2026-07-16T12:00:00Z", "description": "当前服务器时间" }
         }
       },
       "ReadyResponse": {
         "type": "object",
+        "description": "就绪检查响应 — 检查 MySQL 和 Redis 是否可达",
         "properties": {
-          "status": { "type": "string", "example": "ready" },
+          "status": { "type": "string", "example": "ready", "description": "所有依赖正常时为 'ready'，部分异常时为 'degraded'" },
           "checks": {
             "type": "object",
             "properties": {
-              "mysql": { "type": "string", "example": "up" },
-              "redis": { "type": "string", "example": "up" }
+              "mysql": { "type": "string", "example": "up", "description": "'up' 表示连接正常，'down' 表示不可达" },
+              "redis": { "type": "string", "example": "up", "description": "'up' 表示连接正常，'down' 表示不可达" }
             }
           },
-          "time": { "type": "string", "format": "date-time", "example": "2026-07-16T12:00:00Z" }
-        }
-      },
-      "BootstrapResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "object",
-            "properties": {
-              "site": {
-                "type": "object",
-                "properties": {
-                  "name": { "type": "string", "example": "SACC" },
-                  "fullName": { "type": "string", "example": "Science Association of Computer College" },
-                  "tagline": { "type": "string", "example": "探索科学之美，创造技术未来，成就卓越人生" },
-                  "domain": { "type": "string", "example": "sacchome.ttdr.top.ttdr.top" },
-                  "publicIp": { "type": "string", "example": "123.56.221.147" },
-                  "email": { "type": "string", "example": "hello@sacchome.ttdr.top.ttdr.top" },
-                  "logoUrl": { "type": "string", "example": "/image.png" }
-                }
-              }
-            }
-          }
+          "time": { "type": "string", "format": "date-time", "example": "2026-07-16T12:00:00Z", "description": "当前服务器时间" }
         }
       },
       "LoginRequest": {
         "type": "object",
+        "description": "管理员登录请求",
         "required": ["username", "password"],
         "properties": {
-          "username": { "type": "string", "example": "admin" },
-          "password": { "type": "string", "example": "admin123" }
+          "username": { "type": "string", "example": "admin", "description": "登录用户名，由超级管理员在后台创建" },
+          "password": { "type": "string", "example": "admin123", "description": "登录密码，首次登录后建议修改" }
         }
       },
       "LoginResponse": {
         "type": "object",
+        "description": "登录成功响应 — 前端将 token 存入 sessionStorage",
         "properties": {
           "data": {
             "type": "object",
             "properties": {
-              "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIs..." },
-              "expiresIn": { "type": "integer", "example": 43200, "description": "Token有效期(秒)" },
-              "userId": { "type": "integer", "example": 1 },
-              "username": { "type": "string", "example": "admin" },
-              "displayName": { "type": "string", "example": "Super Admin" },
-              "role": { "type": "string", "example": "super_admin", "description": "super_admin 或 editor" }
+              "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIs...", "description": "JWT Token，用于 Authorization: Bearer <token>" },
+              "expiresIn": { "type": "integer", "example": 43200, "description": "Token 有效期，单位秒（43200 = 12 小时）" },
+              "userId": { "type": "integer", "example": 1, "description": "用户 ID" },
+              "username": { "type": "string", "example": "admin", "description": "登录用户名" },
+              "displayName": { "type": "string", "example": "Super Admin", "description": "真实姓名，用于界面展示" },
+              "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色：super_admin 可管理用户和文档库；editor 仅可管理动态和项目" },
+              "position": { "type": "string", "example": "前端组组长", "description": "社团职务，用于界面展示" },
+              "desc": { "type": "string", "example": "官网、组件库、工程化，一砖一瓦建起来。", "description": "个人简介" },
+              "avatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "头像 URL" }
             }
           }
         }
       },
       "ChangePasswordRequest": {
         "type": "object",
+        "description": "修改密码请求 — 需提供旧密码验证身份",
         "required": ["oldPassword", "newPassword"],
         "properties": {
-          "oldPassword": { "type": "string", "example": "admin123" },
-          "newPassword": { "type": "string", "example": "newPassword456" }
+          "oldPassword": { "type": "string", "example": "admin123", "description": "当前密码" },
+          "newPassword": { "type": "string", "example": "newPassword456", "description": "新密码，长度不低于 6 位" }
         }
       },
       "MeResponse": {
         "type": "object",
+        "description": "当前用户信息响应 — 用于前端验证 Token 有效性",
         "properties": {
           "data": {
             "type": "object",
             "properties": {
-              "userId": { "type": "integer", "example": 1 },
-              "username": { "type": "string", "example": "admin" },
-              "role": { "type": "string", "example": "super_admin" }
+              "userId": { "type": "integer", "example": 1, "description": "用户 ID" },
+              "username": { "type": "string", "example": "admin", "description": "登录用户名" },
+              "displayName": { "type": "string", "example": "Super Admin", "description": "真实姓名" },
+              "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
+              "position": { "type": "string", "example": "前端组组长", "description": "社团职务" },
+              "desc": { "type": "string", "example": "一句话简介", "description": "个人简介" },
+              "avatar": { "type": "string", "example": "/uploads/avatars/admin.png", "description": "头像 URL" }
             }
           }
         }
       },
+      "BootstrapData": {
+        "type": "object",
+        "description": "站点完整配置 — GET /api/v1/public/bootstrap 的返回结构，必须与前端 fallbackSiteContent 保持一致。siteApi.ts 使用此数据进行深度合并。",
+        "properties": {
+          "site": { "$ref": "#/components/schemas/SiteMeta", "description": "站点基础信息（站点名、Logo、域名、页脚、社交链接、CTA 等）" },
+          "navigation": { "type": "array", "items": { "$ref": "#/components/schemas/NavItem" }, "description": "顶部导航栏链接列表" },
+          "home": { "$ref": "#/components/schemas/HomePageData", "description": "首页配置（英雄区、统计、亮点、评价、资源）" },
+          "about": { "$ref": "#/components/schemas/AboutPageData", "description": "关于我们页配置（使命、能力、价值观、时间线、荣誉、成员）" },
+          "join": { "$ref": "#/components/schemas/JoinPageData", "description": "加入我们页配置（流程、福利、方向、要求）" },
+          "activities": { "type": "array", "items": { "$ref": "#/components/schemas/ActivityItem" }, "description": "活动列表（含议程、成果等完整信息）" },
+          "projects": { "type": "array", "items": { "$ref": "#/components/schemas/ProjectItem" }, "description": "项目列表（含架构、技术栈、挑战、路线图等）" },
+          "news": { "type": "array", "items": { "$ref": "#/components/schemas/NewsItem" }, "description": "成员动态列表（博客文章）" },
+          "docs": { "type": "array", "items": { "$ref": "#/components/schemas/DocItem" }, "description": "文档库列表（技术文档）" },
+          "team": { "$ref": "#/components/schemas/TeamPageData", "description": "团队介绍页数据" },
+          "gallery": { "$ref": "#/components/schemas/GalleryData", "description": "相册数据" },
+          "faq": { "type": "array", "items": { "$ref": "#/components/schemas/FAQItem" }, "description": "常见问题列表" }
+        }
+      },
+      "SiteMeta": {
+        "type": "object",
+        "description": "站点基础信息",
+        "properties": {
+          "name": { "type": "string", "example": "SACC", "description": "站点简称，用于导航栏品牌名" },
+          "fullName": { "type": "string", "example": "Science Association of Computer College", "description": "站点全称" },
+          "tagline": { "type": "string", "example": "探索科学之美，创造技术未来，成就卓越人生", "description": "站点标语，用于页脚" },
+          "logoUrl": { "type": "string", "example": "/image.png", "description": "站点 Logo 图片 URL" },
+          "domain": { "type": "string", "example": "sacchome.ttdr.top", "description": "站点域名，用于页脚展示" },
+          "publicIp": { "type": "string", "example": "123.56.221.147", "description": "服务器公网 IP，用于页脚展示" },
+          "email": { "type": "string", "example": "hello@sacchome.ttdr.top", "description": "联系邮箱" },
+          "footerStats": { "type": "array", "items": { "$ref": "#/components/schemas/StatItem" }, "description": "页脚统计数据（当前未在前端渲染，预留字段）" },
+          "footerColumns": { "type": "array", "items": { "$ref": "#/components/schemas/FooterColumn" }, "description": "页脚链接分栏" },
+          "socialLinks": { "type": "array", "items": { "$ref": "#/components/schemas/SocialLink" }, "description": "社交媒体链接" },
+          "cta": { "$ref": "#/components/schemas/CtaSection", "description": "全局 CTA（Call To Action）区域配置" }
+        }
+      },
+      "NavItem": { "type": "object", "properties": { "label": { "type": "string", "example": "关于我们" }, "to": { "type": "string", "example": "/about" } } },
+      "FooterColumn": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "example": "官网导航", "description": "栏目标题" },
+          "links": { "type": "array", "items": { "$ref": "#/components/schemas/NavItem" }, "description": "该栏目下的链接列表" }
+        }
+      },
+      "SocialLink": { "type": "object", "properties": { "label": { "type": "string", "example": "GitHub" }, "href": { "type": "string", "example": "https://github.com/" } } },
+      "StatItem": { "type": "object", "properties": { "value": { "type": "string", "example": "500+" }, "label": { "type": "string", "example": "累计成员" } } },
+      "CtaSection": {
+        "type": "object",
+        "description": "全局 CTA 区域，出现在每个页面的页脚上方",
+        "properties": {
+          "title": { "type": "string", "example": "准备好加入我们了吗？" },
+          "description": { "type": "string", "example": "和一群愿意把事情做成的人，一起把热爱变成作品、把成长做成履历。" },
+          "primaryAction": { "$ref": "#/components/schemas/ActionLink" },
+          "secondaryAction": { "$ref": "#/components/schemas/ActionLink" }
+        }
+      },
+      "ActionLink": { "type": "object", "properties": { "label": { "type": "string", "example": "加入我们" }, "to": { "type": "string", "example": "/join-us" } } },
+      "HomePageData": {
+        "type": "object",
+        "description": "首页配置数据",
+        "properties": {
+          "eyebrow": { "type": "string", "example": "2026 SACC Official Site", "description": "首页顶部小标签文字" },
+          "title": { "type": "string", "example": "把热爱做成作品，把成长做成履历", "description": "首页大标题" },
+          "subtitle": { "type": "string", "example": "SACC 是一个围绕训练营、项目、竞赛和内容共创持续运转的技术共同体。" },
+          "heroActions": { "type": "array", "items": { "$ref": "#/components/schemas/HeroAction" }, "description": "首页英雄区操作按钮" },
+          "stats": { "type": "array", "items": { "$ref": "#/components/schemas/StatItem" }, "description": "首页统计数据（成员数、活动数等）" },
+          "highlights": { "type": "array", "items": { "$ref": "#/components/schemas/Highlight" }, "description": "首页亮点卡片（训练营、项目孵化等）" },
+          "testimonials": { "type": "array", "items": { "type": "string" }, "description": "成员评价" },
+          "partners": { "type": "array", "items": { "type": "string" }, "description": "合作伙伴品牌列表" },
+          "resources": { "type": "array", "items": { "$ref": "#/components/schemas/ResourceItem" }, "description": "学习资源数据" }
+        }
+      },
+      "HeroAction": { "type": "object", "properties": { "label": { "type": "string", "example": "了解我们" }, "to": { "type": "string", "example": "/about" }, "tone": { "type": "string", "enum": ["primary", "secondary"], "example": "secondary", "description": "按钮样式变体，可选 'secondary'，默认 primary" } } },
+      "Highlight": { "type": "object", "properties": { "title": { "type": "string", "example": "技术训练营" }, "description": { "type": "string" }, "link": { "type": "string", "example": "/activities" } } },
+      "ResourceItem": { "type": "object", "properties": { "value": { "type": "string", "example": "200+" }, "label": { "type": "string", "example": "学习资料" }, "description": { "type": "string" } } },
+      "AboutPageData": {
+        "type": "object",
+        "description": "关于我们页配置",
+        "properties": {
+          "hero": { "$ref": "#/components/schemas/PageHero" },
+          "missionCards": { "type": "array", "items": { "$ref": "#/components/schemas/CardItem" }, "description": "使命 / 愿景 / 方法三列卡片" },
+          "capabilities": { "type": "array", "items": { "type": "string" }, "description": "能力列表" },
+          "values": { "type": "array", "items": { "$ref": "#/components/schemas/CardItem" }, "description": "价值观四列卡片" },
+          "timeline": { "type": "array", "items": { "$ref": "#/components/schemas/TimelineItem" }, "description": "发展时间线" },
+          "honors": { "type": "array", "items": { "type": "string" }, "description": "荣誉列表" },
+          "members": { "$ref": "#/components/schemas/MembersData", "description": "成员列表（按分组组织）" }
+        }
+      },
+      "PageHero": { "type": "object", "properties": { "eyebrow": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" } } },
+      "CardItem": { "type": "object", "properties": { "title": { "type": "string" }, "description": { "type": "string" } } },
+      "TimelineItem": { "type": "object", "properties": { "year": { "type": "string", "example": "2023" }, "title": { "type": "string" }, "description": { "type": "string" } } },
+      "MembersData": {
+        "type": "object",
+        "description": "成员列表数据 — 按分组组织，前端 MemberSection 组件使用此数据渲染",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MemberGroup" },
+            "description": "成员分组列表，顺序决定前端 Tab 展示顺序"
+          }
+        }
+      },
+      "MemberGroup": {
+        "type": "object",
+        "description": "一个分组的成员信息",
+        "properties": {
+          "id": { "type": "string", "example": "frontend", "description": "分组唯一标识，如 'presidium' / 'frontend' / 'backend'" },
+          "name": { "type": "string", "example": "前端组", "description": "分组显示名称" },
+          "leaders": { "type": "array", "items": { "$ref": "#/components/schemas/MemberLeader" }, "description": "中干列表（组长/副组长/主席等），前端渲染为卡片" },
+          "members": { "type": "array", "items": { "type": "string" }, "description": "普通组员姓名列表，前端以小字展示。主席团此数组为空。" }
+        }
+      },
+      "MemberLeader": {
+        "type": "object",
+        "description": "中干成员信息 — 前端渲染为宽扁卡片，含头像圆圈、姓名、职务、简介",
+        "properties": {
+          "name": { "type": "string", "example": "林嘉禾", "description": "姓名" },
+          "role": { "type": "string", "example": "前端组组长", "description": "社团职务（前端组组长、副组长、执行主席、主席、技术顾问 等）" },
+          "bio": { "type": "string", "example": "官网、组件库、工程化，一砖一瓦建起来。", "description": "一句话自我描述，显示在卡片底部" }
+        }
+      },
+      "MemberListResponse": {
+        "type": "object",
+        "description": "GET /api/v1/public/members 的返回结构",
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/MemberPublicItem" } },
+          "groups": { "type": "array", "items": { "type": "string" }, "example": ["主席团", "办公室", "赛事部", "新媒体", "前端组"], "description": "所有分组名称列表" }
+        }
+      },
+      "MemberPublicItem": {
+        "type": "object",
+        "description": "公开成员信息（不含密码和后台管理角色）",
+        "properties": {
+          "id": { "type": "integer", "example": 1, "description": "成员 ID" },
+          "displayName": { "type": "string", "example": "林嘉禾", "description": "姓名" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "头像 URL" },
+          "position": { "type": "string", "example": "前端组组长", "description": "社团职务" },
+          "desc": { "type": "string", "example": "官网、组件库、工程化，一砖一瓦建起来。", "description": "一句话自我描述" },
+          "group": { "type": "string", "example": "前端组", "description": "所属分组名称" }
+        }
+      },
+      "JoinPageData": {
+        "type": "object",
+        "properties": {
+          "eyebrow": { "type": "string", "example": "Join SACC" },
+          "title": { "type": "string", "example": "加入 SACC，与最能做事的人一起成长" },
+          "subtitle": { "type": "string" },
+          "groupNumber": { "type": "string", "example": "82391579", "description": "招新 QQ 群号" },
+          "timeline": { "type": "array", "items": { "type": "object", "properties": { "title": { "type": "string" }, "detail": { "type": "string" } } }, "description": "加入流程步骤" },
+          "benefits": { "type": "array", "items": { "type": "string" }, "description": "加入福利列表" },
+          "tracks": { "type": "array", "items": { "$ref": "#/components/schemas/CardItem" }, "description": "可选方向（前端/后端/AI/设计）" },
+          "requirements": { "type": "array", "items": { "type": "string" }, "description": "加入要求" }
+        }
+      },
+      "ActivityItem": {
+        "type": "object",
+        "description": "活动信息",
+        "properties": {
+          "slug": { "type": "string", "example": "programming-marathon-2025", "description": "URL 标识" },
+          "title": { "type": "string", "example": "编程马拉松 2025" },
+          "date": { "type": "string", "example": "2025-12-15", "description": "活动日期（YYYY-MM-DD）" },
+          "location": { "type": "string", "example": "创新实验中心", "description": "活动地点" },
+          "quota": { "type": "integer", "example": 90, "description": "名额上限" },
+          "category": { "type": "string", "example": "竞赛活动", "description": "活动分类" },
+          "summary": { "type": "string", "description": "活动简述" },
+          "description": { "type": "string", "description": "活动详情" },
+          "agenda": { "type": "array", "items": { "type": "string" }, "description": "活动议程" },
+          "outcomes": { "type": "array", "items": { "type": "string" }, "description": "预期成果" },
+          "linkLabel": { "type": "string", "example": "查看详情", "description": "跳转按钮文字" }
+        }
+      },
+      "ProjectItem": {
+        "type": "object",
+        "description": "项目信息 — 注意：后台管理端通过 /api/v1/admin/content（module=projects）维护，字段映射如下：title→title, summary→summary, body→description, tags→techStack, repoUrl→repoUrl",
+        "properties": {
+          "slug": { "type": "string", "example": "smart-knowledge-base", "description": "URL 标识" },
+          "title": { "type": "string", "example": "SACC 智能知识库" },
+          "owner": { "type": "string", "example": "AI 小组", "description": "项目负责小组" },
+          "summary": { "type": "string", "description": "项目简述" },
+          "progress": { "type": "string", "example": "85%", "description": "完成进度" },
+          "status": { "type": "string", "example": "在研", "description": "项目状态（在研 / 开发中 / 已交付）" },
+          "repoUrl": { "type": "string", "example": "https://github.com/njupt-sacc/smart-knowledge-base", "description": "GitHub 仓库地址" },
+          "description": { "type": "string", "description": "项目详细描述" },
+          "architecture": { "type": "array", "items": { "type": "string" }, "description": "系统架构层级" },
+          "techStack": { "type": "array", "items": { "type": "string" }, "description": "技术栈标签" },
+          "challenges": { "type": "array", "items": { "type": "string" }, "description": "遇到的挑战" },
+          "codeSample": { "type": "string", "description": "代码示例片段" },
+          "roadmap": { "type": "array", "items": { "type": "string" }, "description": "后续规划" },
+          "awards": { "type": "array", "items": { "type": "string" }, "description": "获奖/荣誉" },
+          "team": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "role": { "type": "string" } } }, "description": "项目组成员" }
+        }
+      },
+      "NewsItem": {
+        "type": "object",
+        "description": "成员动态（博客文章）— 前端 NewsPage 和 NewsDetailPage 使用此数据结构。注意：成员动态列表接口不返回 content 字段，详情接口才返回。列表接口中 content 为 null。",
+        "properties": {
+          "slug": { "type": "string", "example": "server-components-notes", "description": "URL 标识（唯一）" },
+          "title": { "type": "string", "example": "把首屏交给 Server Components：官网性能优化实录", "description": "文章标题" },
+          "category": { "type": "string", "example": "工程实践", "description": "文章分类标签" },
+          "coverImage": { "type": "string", "example": "/images/blog-cover-performance.png", "description": "封面图 URL" },
+          "author": { "type": "string", "example": "林嘉禾", "description": "作者姓名" },
+          "authorAvatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "作者头像 URL，后端查询时从用户表关联获取" },
+          "role": { "type": "string", "example": "前端负责人", "description": "作者社团职务" },
+          "date": { "type": "string", "example": "2026-04-06", "description": "发布日期（YYYY-MM-DD）" },
+          "readMinutes": { "type": "integer", "example": 8, "description": "预估阅读分钟数" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["Next.js", "性能", "React"], "description": "文章标签" },
+          "summary": { "type": "string", "example": "记录我们如何用 Server Components 把首屏 JS 压到接近为零。", "description": "文章摘要，列表卡片展示用" },
+          "content": { "type": "string", "description": "文章正文（Markdown 格式）。列表接口中此字段为 null，仅 GET /api/v1/content/{id} 详情接口返回。" }
+        }
+      },
+      "DocItem": {
+        "type": "object",
+        "description": "文档库条目 — 前端 DocsPage 使用此数据结构",
+        "properties": {
+          "slug": { "type": "string", "example": "project-overview", "description": "URL 标识（唯一）" },
+          "title": { "type": "string", "example": "项目概述", "description": "文档标题" },
+          "category": { "type": "string", "example": "入门", "description": "文档分类（入门 / 规范 / 组件 等）" },
+          "order": { "type": "integer", "example": 1, "description": "排序序号，数字越小越靠前" },
+          "updatedAt": { "type": "string", "example": "2026-04-05", "description": "最后更新日期（YYYY-MM-DD）" },
+          "description": { "type": "string", "example": "了解官网建设项目的背景、目标与整体范围。", "description": "文档简介" },
+          "content": { "type": "string", "description": "文档正文（Markdown 格式）。列表接口中此字段为 null，仅详情接口返回。" }
+        }
+      },
       "ContentItem": {
         "type": "object",
-        "description": "内容详情（含正文 body），用于 GET /api/v1/content/{id} 详情接口",
+        "description": "内容详情（含正文 body）— 用于 GET /api/v1/content/{id} 详情接口。管理端编辑时需要完整字段。",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "module": { "type": "string", "example": "news", "description": "news / docs / projects" },
-          "slug": { "type": "string", "example": "server-components-notes" },
-          "title": { "type": "string", "example": "标题" },
-          "summary": { "type": "string", "example": "摘要" },
-          "body": { "type": "string", "example": "## Markdown正文", "description": "正文内容，仅详情接口返回" },
-          "tags": { "type": "array", "items": { "type": "string" }, "example": ["React", "性能"] },
-          "status": { "type": "string", "example": "published", "enum": ["draft", "published", "archived"] },
+          "id": { "type": "integer", "example": 1, "description": "内容 ID" },
+          "module": { "type": "string", "example": "news", "enum": ["news", "docs", "projects"], "description": "内容模块" },
+          "slug": { "type": "string", "example": "server-components-notes", "description": "URL 标识" },
+          "title": { "type": "string", "example": "文章标题", "description": "标题" },
+          "summary": { "type": "string", "example": "文章摘要", "description": "摘要，列表展示用" },
+          "body": { "type": "string", "example": "## Markdown 正文", "description": "正文内容（Markdown 格式）。仅详情接口返回，列表接口不包含此字段。" },
+          "category": { "type": "string", "example": "工程实践", "description": "分类标签（news/docs 使用），对应前端 item.category" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["React", "性能"], "description": "内容标签（news/projects 使用），对应前端 item.tags / item.techStack" },
+          "status": { "type": "string", "example": "published", "enum": ["draft", "published", "archived"], "description": "内容状态：draft（草稿）、published（已发布）、archived（已归档）" },
           "author": { "type": "string", "example": "林嘉禾", "description": "作者姓名" },
-          "authorAvatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "作者头像URL，后端查询时从用户表关联获取" },
-          "publishedAt": { "type": "string", "format": "date-time", "nullable": true, "example": "2026-04-06T00:00:00Z" },
-          "createdAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z" },
-          "updatedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z" }
+          "authorAvatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "作者头像 URL，后端查询时从用户表关联获取" },
+          "repoUrl": { "type": "string", "example": "https://github.com/njupt-sacc/xxx", "description": "仓库链接（projects 使用）" },
+          "sortOrder": { "type": "integer", "example": 0, "description": "排序序号（docs/projects 使用），数字越小越靠前" },
+          "publishedAt": { "type": "string", "format": "date-time", "nullable": true, "example": "2026-04-06T00:00:00Z", "description": "发布时间" },
+          "createdAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z", "description": "创建时间" },
+          "updatedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z", "description": "最后更新时间" }
         }
       },
       "ContentItemSummary": {
         "type": "object",
-        "description": "内容摘要（不含正文 body），用于列表接口，减少传输体积",
+        "description": "内容摘要（不含正文 body）— 用于 GET /api/v1/content 和 GET /api/v1/admin/content 列表接口。不含 body 以减少传输体积，前端点击详情后再请求完整内容。",
         "properties": {
           "id": { "type": "integer", "example": 1 },
-          "module": { "type": "string", "example": "news", "description": "news / docs / projects" },
-          "slug": { "type": "string", "example": "server-components-notes" },
-          "title": { "type": "string", "example": "标题" },
-          "summary": { "type": "string", "example": "摘要" },
+          "module": { "type": "string", "example": "news", "enum": ["news", "docs", "projects"], "description": "内容模块" },
+          "slug": { "type": "string", "example": "server-components-notes", "description": "URL 标识" },
+          "title": { "type": "string", "example": "文章标题" },
+          "summary": { "type": "string", "example": "文章摘要" },
+          "category": { "type": "string", "example": "工程实践", "description": "分类标签" },
           "tags": { "type": "array", "items": { "type": "string" }, "example": ["React", "性能"] },
           "status": { "type": "string", "example": "published", "enum": ["draft", "published", "archived"] },
-          "author": { "type": "string", "example": "林嘉禾", "description": "作者姓名" },
-          "authorAvatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "作者头像URL，后端查询时从用户表关联获取" },
+          "author": { "type": "string", "example": "林嘉禾" },
+          "authorAvatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "作者头像 URL" },
+          "repoUrl": { "type": "string", "example": "https://github.com/njupt-sacc/xxx" },
+          "sortOrder": { "type": "integer", "example": 0 },
           "publishedAt": { "type": "string", "format": "date-time", "nullable": true, "example": "2026-04-06T00:00:00Z" },
           "createdAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z" },
           "updatedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z" }
@@ -570,108 +838,151 @@
       },
       "ContentItemResponse": {
         "type": "object",
-        "properties": {
-          "data": { "$ref": "#/components/schemas/ContentItem" }
-        }
+        "description": "单条内容详情响应",
+        "properties": { "data": { "$ref": "#/components/schemas/ContentItem" } }
       },
       "ContentListResponse": {
         "type": "object",
+        "description": "内容列表响应 — 不含正文 body，仅包含 ContentItemSummary",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/ContentItemSummary" }
-          },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/ContentItemSummary" } },
           "pagination": {
             "type": "object",
             "properties": {
-              "page": { "type": "integer", "example": 1 },
-              "pageSize": { "type": "integer", "example": 20 },
-              "total": { "type": "integer", "example": 1 }
+              "page": { "type": "integer", "example": 1, "description": "当前页码" },
+              "pageSize": { "type": "integer", "example": 20, "description": "每页条数" },
+              "total": { "type": "integer", "example": 128, "description": "总记录数" }
             }
           }
         }
       },
+      "UpsertContentRequest": {
+        "type": "object",
+        "description": "创建/更新内容请求 — POST /api/v1/admin/content 和 PUT /api/v1/admin/content/{id} 共用。module 和 title 为必填。slug 留空则自动从 title 生成拼音 slug。",
+        "required": ["module", "title"],
+        "properties": {
+          "module": { "type": "string", "example": "news", "enum": ["news", "docs", "projects"], "description": "内容模块：news=成员动态、docs=文档库、projects=项目展示" },
+          "title": { "type": "string", "example": "文章标题", "description": "标题" },
+          "slug": { "type": "string", "example": "my-post-slug", "description": "URL 标识，留空则从 title 自动生成" },
+          "summary": { "type": "string", "example": "文章摘要", "description": "摘要" },
+          "body": { "type": "string", "example": "## Markdown 正文", "description": "正文内容（Markdown 格式）" },
+          "category": { "type": "string", "example": "工程实践", "description": "分类标签" },
+          "tags": { "type": "array", "items": { "type": "string" }, "example": ["React", "性能"], "description": "标签列表" },
+          "status": { "type": "string", "example": "draft", "enum": ["draft", "published", "archived"], "description": "内容状态，新建时默认 draft" },
+          "author": { "type": "string", "example": "林嘉禾", "description": "作者姓名" },
+          "repoUrl": { "type": "string", "example": "https://github.com/njupt-sacc/xxx", "description": "仓库链接（仅 projects 模块使用）" },
+          "publishedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T00:00:00Z", "description": "发布时间（设置后 status 建议同步改为 published）" }
+        }
+      },
+      "ReorderRequest": {
+        "type": "object",
+        "description": "调整排序请求 — PUT /api/v1/admin/content/reorder",
+        "required": ["module", "orderedIds"],
+        "properties": {
+          "module": { "type": "string", "example": "docs", "enum": ["docs", "projects"], "description": "要调整排序的模块" },
+          "orderedIds": { "type": "array", "items": { "type": "integer" }, "example": [1, 3, 2, 5, 4], "description": "按新顺序排列的内容 ID 数组，第一个 ID 的 sortOrder=0，依次递增" }
+        }
+      },
       "UserItem": {
         "type": "object",
+        "description": "后台用户信息 — 注意区分 role（后台管理角色）和 position（社团职务）",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "username": { "type": "string", "example": "admin", "description": "登录用户名" },
-          "displayName": { "type": "string", "example": "周亦晨", "description": "真实姓名" },
-          "avatar": { "type": "string", "example": "/uploads/avatars/zhouyichen.png", "description": "头像URL" },
-          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
-          "position": { "type": "string", "example": "执行主席", "description": "社团职务，如：执行主席、主席、技术顾问、前端组组长、后端组副组长、组员等" },
-          "desc": { "type": "string", "example": "统筹全局，确保每一件事都有闭环。", "description": "一句话自我描述" },
-          "status": { "type": "string", "example": "active" },
-          "createdAt": { "type": "string", "example": "2026-01-15T00:00:00Z" }
+          "id": { "type": "integer", "example": 1, "description": "用户 ID" },
+          "username": { "type": "string", "example": "linjiahe", "description": "登录用户名（唯一）" },
+          "displayName": { "type": "string", "example": "林嘉禾", "description": "真实姓名，用于界面展示" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "头像 URL" },
+          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色：super_admin=可管理用户和文档库；editor=仅可管理动态和项目" },
+          "position": { "type": "string", "example": "前端组组长", "description": "社团职务，如：执行主席、主席、技术顾问、前端组组长、后端组副组长、组员 等。用于官网成员展示。" },
+          "desc": { "type": "string", "example": "官网、组件库、工程化，一砖一瓦建起来。", "description": "一句话自我描述，用于官网成员卡片" },
+          "status": { "type": "string", "example": "active", "enum": ["active", "disabled"], "description": "账号状态：active=正常；disabled=已禁用（无法登录）" },
+          "createdAt": { "type": "string", "format": "date-time", "example": "2026-01-15T00:00:00Z", "description": "账号创建时间" }
         }
       },
       "UserListResponse": {
         "type": "object",
+        "description": "用户列表响应 — 不含密码字段",
         "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/UserItem" } } }
-      },
-      "MemberPublicItem": {
-        "type": "object",
-        "description": "公开接口返回的成员信息，不含密码和后台角色",
-        "properties": {
-          "id": { "type": "integer", "example": 1, "description": "成员ID" },
-          "displayName": { "type": "string", "example": "周亦晨", "description": "姓名" },
-          "avatar": { "type": "string", "example": "/uploads/avatars/zhouyichen.png", "description": "头像URL" },
-          "position": { "type": "string", "example": "执行主席", "description": "社团职务" },
-          "desc": { "type": "string", "example": "统筹全局，确保每一件事都有闭环。", "description": "一句话自我描述" },
-          "group": { "type": "string", "example": "主席团", "description": "所属分组" }
-        }
-      },
-      "MemberListResponse": {
-        "type": "object",
-        "properties": {
-          "data": { "type": "array", "items": { "$ref": "#/components/schemas/MemberPublicItem" } },
-          "groups": {
-            "type": "array",
-            "items": { "type": "string" },
-            "example": ["主席团", "办公室", "赛事部", "新媒体", "前端组", "后端组", "安全组", "Python组", "算法组"],
-            "description": "所有分组列表，供前端切换使用"
-          }
-        }
       },
       "CreateUserRequest": {
         "type": "object",
+        "description": "创建用户请求",
         "required": ["username", "password"],
         "properties": {
-          "username": { "type": "string", "example": "newuser", "description": "登录用户名" },
-          "displayName": { "type": "string", "example": "张三", "description": "真实姓名" },
-          "password": { "type": "string", "example": "pass123" },
-          "role": { "type": "string", "example": "editor", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
-          "position": { "type": "string", "example": "前端组副组长", "description": "社团职务" },
-          "desc": { "type": "string", "example": "把设计稿还原到像素级。", "description": "一句话自我描述" },
-          "avatar": { "type": "string", "example": "/uploads/avatars/zhangsan.png", "description": "头像URL" }
+          "username": { "type": "string", "example": "linjiahe", "description": "登录用户名（唯一，不可重复）" },
+          "displayName": { "type": "string", "example": "林嘉禾", "description": "真实姓名" },
+          "password": { "type": "string", "example": "pass123", "description": "登录密码，长度不低于 6 位" },
+          "role": { "type": "string", "example": "editor", "enum": ["super_admin", "editor"], "description": "后台管理角色，默认 editor" },
+          "position": { "type": "string", "example": "前端组组长", "description": "社团职务（可选）" },
+          "desc": { "type": "string", "example": "官网、组件库、工程化。", "description": "一句话自我描述（可选）" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "头像 URL（可选，可通过上传接口获取）" }
         }
       },
       "UpdateUserRequest": {
         "type": "object",
+        "description": "修改用户请求 — 所有字段均为可选，只传需要修改的字段。password 留空则不修改密码。",
         "properties": {
-          "username": { "type": "string", "example": "newadmin" },
-          "displayName": { "type": "string", "example": "新名字" },
-          "password": { "type": "string", "example": "newpass", "description": "留空则不修改" },
+          "username": { "type": "string", "example": "linjiahe_new", "description": "新登录用户名" },
+          "displayName": { "type": "string", "example": "林嘉禾", "description": "真实姓名" },
+          "password": { "type": "string", "example": "newpass123", "description": "新密码，留空则不修改密码" },
           "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
-          "position": { "type": "string", "example": "执行主席", "description": "社团职务" },
-          "desc": { "type": "string", "example": "统筹全局，确保每一件事都有闭环。", "description": "一句话自我描述" },
-          "avatar": { "type": "string", "example": "/uploads/avatars/zhouyichen.png", "description": "头像URL" }
+          "position": { "type": "string", "example": "前端组组长", "description": "社团职务" },
+          "desc": { "type": "string", "example": "更新后的简介。", "description": "一句话自我描述" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/linjiahe.png", "description": "头像 URL" }
         }
       },
-      "UpsertContentRequest": {
+      "TeamPageData": {
         "type": "object",
-        "required": ["module", "title"],
+        "description": "团队介绍页数据",
         "properties": {
-          "module": { "type": "string", "example": "news", "description": "news / docs / projects" },
-          "title": { "type": "string", "example": "标题" },
-          "slug": { "type": "string", "example": "my-slug", "description": "留空则从title自动生成" },
-          "summary": { "type": "string", "example": "摘要" },
-          "body": { "type": "string", "example": "## Markdown正文" },
-          "tags": { "type": "array", "items": { "type": "string" }, "example": ["React"] },
-          "status": { "type": "string", "example": "draft", "enum": ["draft", "published", "archived"] },
-          "author": { "type": "string", "example": "林嘉禾" },
-          "publishedAt": { "type": "string", "format": "date-time", "example": "2026-04-06T00:00:00Z" }
+          "intro": { "type": "object", "properties": { "title": { "type": "string" }, "description": { "type": "string" } } },
+          "leadership": { "type": "array", "items": { "$ref": "#/components/schemas/TeamMember" }, "description": "主席团成员" },
+          "technical": { "type": "array", "items": { "$ref": "#/components/schemas/TeamMember" }, "description": "技术方向负责人" },
+          "nonTechnical": { "type": "array", "items": { "$ref": "#/components/schemas/TeamMember" }, "description": "非技术方向成员" }
         }
+      },
+      "TeamMember": { "type": "object", "properties": { "name": { "type": "string" }, "role": { "type": "string" }, "avatar": { "type": "string" }, "focus": { "type": "string", "description": "职责描述" } } },
+      "GalleryData": {
+        "type": "object",
+        "properties": {
+          "albums": { "type": "array", "items": { "type": "object", "properties": { "slug": { "type": "string" }, "title": { "type": "string" }, "date": { "type": "string" }, "summary": { "type": "string" }, "accent": { "type": "string" } } } },
+          "archiveYears": { "type": "array", "items": { "type": "object", "properties": { "year": { "type": "string" }, "count": { "type": "integer" } } } }
+        }
+      },
+      "FAQItem": { "type": "object", "properties": { "question": { "type": "string" }, "answer": { "type": "string" } } },
+      "DashboardResponse": {
+        "type": "object",
+        "description": "仪表盘统计数据响应 — GET /api/v1/admin/dashboard",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "siteVisits": { "type": "integer", "example": 128460, "description": "站点总访问量" },
+              "activeMembers": { "type": "integer", "example": 312, "description": "活跃成员数" },
+              "newsCount": { "type": "integer", "example": 128, "description": "成员动态总数" },
+              "docsCount": { "type": "integer", "example": 32, "description": "文档总数" },
+              "projectsCount": { "type": "integer", "example": 24, "description": "项目总数" },
+              "pendingNews": { "type": "integer", "example": 4, "description": "待审核动态数" },
+              "draftDocs": { "type": "integer", "example": 8, "description": "草稿文档数" }
+            }
+          }
+        }
+      },
+      "AuditLogItem": {
+        "type": "object",
+        "description": "操作审计日志条目",
+        "properties": {
+          "id": { "type": "integer", "example": 1, "description": "日志 ID" },
+          "module": { "type": "string", "example": "news", "description": "操作模块：news / docs / projects / users / about 等" },
+          "action": { "type": "string", "example": "create", "enum": ["create", "update", "delete"], "description": "操作类型" },
+          "actor": { "type": "string", "example": "林嘉禾", "description": "操作人姓名" },
+          "detail": { "type": "string", "example": "发布博客「性能优化实录」", "description": "操作详情描述" },
+          "timestamp": { "type": "string", "format": "date-time", "example": "2026-04-06T20:10:00Z", "description": "操作时间" }
+        }
+      },
+      "AuditLogResponse": {
+        "type": "object",
+        "description": "审计日志列表响应 — GET /api/v1/admin/audit-log",
+        "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/AuditLogItem" } } }
       }
     }
   }
