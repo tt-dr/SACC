@@ -152,6 +152,104 @@ export const fallbackSiteContent = {
       '校园开放日优秀展示团队',
       '多家企业联合实践合作社团',
     ],
+    members: {
+      groups: [
+        {
+          id: 'presidium',
+          name: '主席团',
+          leaders: [
+            { name: '周亦晨', role: '执行主席', bio: '统筹全局，确保每一件事都有闭环。' },
+            { name: '许沐安', role: '主席', bio: '专注训练营与招新，把成长路径跑通。' },
+            { name: '陈思远', role: '主席', bio: '推进周会复盘，让制度不只是纸上。' },
+            { name: '林嘉禾', role: '主席', bio: '前端工程化，把设计变成可维护的代码。' },
+            { name: '赵奕辰', role: '主席', bio: '接口、缓存、部署，后端三件事。' },
+            { name: '沈知白', role: '主席', bio: '让 AI 在校园真正落地，而不是只写 PPT。' },
+            { name: '顾安可', role: '技术顾问', bio: '品牌与内容的平衡，设计不只是好看。' },
+          ],
+          members: [],
+        },
+        {
+          id: 'office',
+          name: '办公室',
+          leaders: [
+            { name: '江若云', role: '组长', bio: '管好每一份档案、排期和会议纪要。' },
+            { name: '徐子谦', role: '副组长', bio: '让行政流程自动化，减少重复劳动。' },
+            { name: '何语晴', role: '副组长', bio: '沟通是办公室最重要的技术。' },
+          ],
+          members: ['张轩铭', '刘雨桐', '王思源', '陈乐怡', '李泽宇', '赵心怡'],
+        },
+        {
+          id: 'event',
+          name: '赛事部',
+          leaders: [
+            { name: '秦正阳', role: '组长', bio: '把每场比赛办成可复盘的工程。' },
+            { name: '孙若溪', role: '副组长', bio: '赛题设计、流程管控，细节决定体验。' },
+            { name: '陆启帆', role: '副组长', bio: '从场地到设备，保障比赛不翻车。' },
+          ],
+          members: ['郑浩然', '吴芷若', '马骏驰', '韩雨萱', '杨博文', '姜欣然'],
+        },
+        {
+          id: 'new-media',
+          name: '新媒体',
+          leaders: [
+            { name: '苏漫宁', role: '组长', bio: '品牌视觉不是画图，是讲好 SACC 的故事。' },
+            { name: '程彦宁', role: '副组长', bio: '外联与传播，让更多人看到我们。' },
+            { name: '白毓泽', role: '副组长', bio: '海报、推送、视频，每个触点都用心。' },
+          ],
+          members: ['谢佳怡', '黄俊杰', '丁梦瑶', '沈逸飞', '叶婉清', '高铭远'],
+        },
+        {
+          id: 'frontend',
+          name: '前端组',
+          leaders: [
+            { name: '林嘉禾', role: '组长', bio: '官网、组件库、工程化，一砖一瓦建起来。' },
+            { name: '顾安可', role: '副组长', bio: '内容与体验并重，让官网会说话。' },
+            { name: '傅明哲', role: '副组长', bio: '把设计稿还原到像素级。' },
+          ],
+          members: ['唐静怡', '宋文博', '柳雨薇', '孟浩然', '肖欣然', '潘致诚'],
+        },
+        {
+          id: 'backend',
+          name: '后端组',
+          leaders: [
+            { name: '赵奕辰', role: '组长', bio: 'Gin + Gorm，稳是第一位。' },
+            { name: '梁知行', role: '副组长', bio: '接口设计先想边界，再写代码。' },
+            { name: '袁婉清', role: '副组长', bio: '数据库不是存数据，是建模业务。' },
+          ],
+          members: ['范睿阳', '蒋思琪', '彭俊辉', '黎晓萌', '田云轩', '魏芷兰'],
+        },
+        {
+          id: 'security',
+          name: '安全组',
+          leaders: [
+            { name: '邢致远', role: '组长', bio: '安全不是补漏洞，是从设计就开始防守。' },
+            { name: '傅嘉宁', role: '副组长', bio: 'CTF 与渗透，攻防一体。' },
+            { name: '余清风', role: '副组长', bio: '代码审计，让每一行都经得起考验。' },
+          ],
+          members: ['曹云帆', '董思涵', '罗嘉瑞', '常雨晴', '贺知远', '阮佳怡'],
+        },
+        {
+          id: 'python',
+          name: 'Python组',
+          leaders: [
+            { name: '沈知白', role: '组长', bio: '从 RAG 到 Agent，把 AI 写进生产环境。' },
+            { name: '俞峻熙', role: '副组长', bio: 'Python 生态，脚手架到微服务都碰。' },
+            { name: '姜若涵', role: '副组长', bio: '数据处理与模型训练，耐心出结果。' },
+          ],
+          members: ['关志远', '郭语彤', '宋景行', '程可欣', '冯逸轩', '梅琳'],
+        },
+        {
+          id: 'algorithm',
+          name: '算法组',
+          leaders: [
+            { name: '宋景澄', role: '组长', bio: '刷题千道不如讲透一道，训练讲究方法。' },
+            { name: '楚清远', role: '副组长', bio: '图论和 DP，两座山翻过去就是风景。' },
+            { name: '乔思妍', role: '副组长', bio: '竞赛不只是代码，是心态和策略。' },
+          ],
+          members: ['温煦阳', '齐婉秋', '汪靖宇', '向雨薇', '陶知行', '冉晴'],
+        },
+      ],
+    },
   },
   join: {
     eyebrow: 'Join SACC',
@@ -650,3 +748,5 @@ export type NewsItem = SiteContent['news'][number]
 export type DocItem = SiteContent['docs'][number]
 export type TeamCollection = SiteContent['team']
 export type TeamMember = TeamCollection['leadership'][number]
+export type MemberGroup = SiteContent['about']['members']['groups'][number]
+export type MemberLeader = MemberGroup['leaders'][number]

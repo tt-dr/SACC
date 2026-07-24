@@ -6,6 +6,14 @@ import useRouteScrollTop from '../../hooks/useRouteScrollTop'
 import { useSiteData } from '../../context/SiteDataContext'
 import './site.css'
 
+const TECH_DEPTS = [
+  { label: '前端组', href: '#' },
+  { label: '后端组', href: '#' },
+  { label: '安全组', href: '#' },
+  { label: 'Python组', href: '#' },
+  { label: '算法组', href: '#' },
+]
+
 function resolveNavActive(pathname, linkPath) {
   if (linkPath === '/') {
     return pathname === '/'
@@ -45,6 +53,16 @@ function SiteLayout({ children, scrollClassName = 'site-scroll', backToTopClassN
                   {item.label}
                 </NavLink>
               ))}
+              <div className="site-nav-dropdown">
+                <span className="site-nav-dropdown-trigger">技术部门</span>
+                <div className="site-nav-dropdown-menu">
+                  {TECH_DEPTS.map((dept) => (
+                    <a key={dept.label} className="site-nav-dropdown-item" href={dept.href}>
+                      {dept.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
             </nav>
 
             <Link className="site-header-cta" to="/join-us">

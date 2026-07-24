@@ -1,4 +1,5 @@
 import { Compass, Flag, Layers3, Target } from 'lucide-react'
+import MemberSection from '../components/site/MemberSection'
 import PageHero from '../components/site/PageHero'
 import SectionHeading from '../components/site/SectionHeading'
 import SiteLayout from '../components/site/SiteLayout'
@@ -41,6 +42,8 @@ function AboutPage() {
           </div>
         </div>
       </section>
+
+      <MemberSection />
 
       <section className="site-section site-section-warm">
         <div className="site-container two-column-grid">

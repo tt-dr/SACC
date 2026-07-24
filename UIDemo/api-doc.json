@@ -80,6 +80,52 @@
         }
       }
     },
+    "/api/v1/public/members": {
+      "get": {
+        "tags": ["公开接口"],
+        "summary": "成员列表",
+        "description": "获取所有社团成员信息，包括头像、姓名、社团职务、一句话描述和所属分组。供官网「关于我们」页面成员模块使用。",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MemberListResponse" },
+                "example": {
+                  "data": [
+                    {
+                      "id": 1,
+                      "displayName": "周亦晨",
+                      "avatar": "/uploads/avatars/zhouyichen.png",
+                      "position": "执行主席",
+                      "desc": "统筹全局，确保每一件事都有闭环。",
+                      "group": "主席团"
+                    },
+                    {
+                      "id": 2,
+                      "displayName": "林嘉禾",
+                      "avatar": "/uploads/avatars/linjiahe.png",
+                      "position": "前端组组长",
+                      "desc": "官网、组件库、工程化，一砖一瓦建起来。",
+                      "group": "前端组"
+                    },
+                    {
+                      "id": 3,
+                      "displayName": "张轩铭",
+                      "avatar": "/uploads/avatars/default.png",
+                      "position": "组员",
+                      "desc": "",
+                      "group": "办公室"
+                    }
+                  ],
+                  "groups": ["主席团", "办公室", "赛事部", "新媒体", "前端组", "后端组", "安全组", "Python组", "算法组"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": ["认证"],
@@ -527,27 +573,55 @@
         "type": "object",
         "properties": {
           "id": { "type": "integer", "example": 1 },
-          "username": { "type": "string", "example": "admin" },
-          "displayName": { "type": "string", "example": "Super Admin" },
-          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"] },
+          "username": { "type": "string", "example": "admin", "description": "登录用户名" },
+          "displayName": { "type": "string", "example": "周亦晨", "description": "真实姓名" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/zhouyichen.png", "description": "头像URL" },
+          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
+          "position": { "type": "string", "example": "执行主席", "description": "社团职务，如：执行主席、主席、技术顾问、前端组组长、后端组副组长、组员等" },
+          "desc": { "type": "string", "example": "统筹全局，确保每一件事都有闭环。", "description": "一句话自我描述" },
           "status": { "type": "string", "example": "active" },
           "createdAt": { "type": "string", "example": "2026-01-15T00:00:00Z" }
         }
       },
       "UserListResponse": {
         "type": "object",
+        "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/UserItem" } } }
+      },
+      "MemberPublicItem": {
+        "type": "object",
+        "description": "公开接口返回的成员信息，不含密码和后台角色",
         "properties": {
-          "data": { "type": "array", "items": { "$ref": "#/components/schemas/UserItem" } }
+          "id": { "type": "integer", "example": 1, "description": "成员ID" },
+          "displayName": { "type": "string", "example": "周亦晨", "description": "姓名" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/zhouyichen.png", "description": "头像URL" },
+          "position": { "type": "string", "example": "执行主席", "description": "社团职务" },
+          "desc": { "type": "string", "example": "统筹全局，确保每一件事都有闭环。", "description": "一句话自我描述" },
+          "group": { "type": "string", "example": "主席团", "description": "所属分组" }
+        }
+      },
+      "MemberListResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/MemberPublicItem" } },
+          "groups": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["主席团", "办公室", "赛事部", "新媒体", "前端组", "后端组", "安全组", "Python组", "算法组"],
+            "description": "所有分组列表，供前端切换使用"
+          }
         }
       },
       "CreateUserRequest": {
         "type": "object",
         "required": ["username", "password"],
         "properties": {
-          "username": { "type": "string", "example": "newuser" },
-          "displayName": { "type": "string", "example": "新成员" },
+          "username": { "type": "string", "example": "newuser", "description": "登录用户名" },
+          "displayName": { "type": "string", "example": "张三", "description": "真实姓名" },
           "password": { "type": "string", "example": "pass123" },
-          "role": { "type": "string", "example": "editor", "enum": ["super_admin", "editor"] }
+          "role": { "type": "string", "example": "editor", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
+          "position": { "type": "string", "example": "前端组副组长", "description": "社团职务" },
+          "desc": { "type": "string", "example": "把设计稿还原到像素级。", "description": "一句话自我描述" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/zhangsan.png", "description": "头像URL" }
         }
       },
       "UpdateUserRequest": {
@@ -556,7 +630,10 @@
           "username": { "type": "string", "example": "newadmin" },
           "displayName": { "type": "string", "example": "新名字" },
           "password": { "type": "string", "example": "newpass", "description": "留空则不修改" },
-          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"] }
+          "role": { "type": "string", "example": "super_admin", "enum": ["super_admin", "editor"], "description": "后台管理角色" },
+          "position": { "type": "string", "example": "执行主席", "description": "社团职务" },
+          "desc": { "type": "string", "example": "统筹全局，确保每一件事都有闭环。", "description": "一句话自我描述" },
+          "avatar": { "type": "string", "example": "/uploads/avatars/zhouyichen.png", "description": "头像URL" }
         }
       },
       "UpsertContentRequest": {

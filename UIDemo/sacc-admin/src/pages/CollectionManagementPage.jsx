@@ -85,10 +85,10 @@ const MODULE_PAGE_UI = {
   users: {
     pageTitle: '用户管理',
     createLabel: '新建账号',
-    searchPlaceholder: '搜索用户名 / 角色',
+    searchPlaceholder: '搜索用户名 / 姓名 / 职务',
     toolbarCopy: '角色：全部 ▼    + 新建账号',
     editorTitle: '账号编辑',
-    editorHint: '管理后台登录账号，分配角色（super_admin / editor）',
+    editorHint: '管理后台登录账号，分配管理角色与社团职务，编辑个人描述',
     saveLabel: '保存账号',
     infoTitle: '角色分布',
     infoCards: [
@@ -97,7 +97,7 @@ const MODULE_PAGE_UI = {
       { title: '总用户数', value: '3 人' },
     ],
     sectionTitle: '用户列表',
-    sectionHint: '字段：用户名 / 角色 / 状态 / 创建日期。仅超级管理员可访问此页面。',
+    sectionHint: '字段：用户名 / 姓名 / 职务 / 创建日期。仅超级管理员可访问此页面。',
     sectionFoot: '密码由管理员在创建时设置，用户首次登录后可自行修改。',
   },
 }
@@ -117,8 +117,12 @@ function formatDocRow(item) {
 function formatUserRow(item) {
   const role = item.roleName || 'editor'
   const roleLabel = role === 'super_admin' ? '超级管理员' : '普通成员'
+  const position = item.position || ''
   const createdAt = item.scheduledAt || '2026-01-15'
-  return { avatar: item.avatar || '/uploads/avatars/default.png', label: `${item.title}      ${roleLabel}      ${createdAt}` }
+  const displayLabel = item.displayName
+    ? `${item.title}      ${item.displayName}      ${position || roleLabel}      ${createdAt}`
+    : `${item.title}      ${roleLabel}      ${createdAt}`
+  return { avatar: item.avatar || '/uploads/avatars/default.png', label: displayLabel }
 }
 
 function TextField({ label, children }) {
@@ -264,12 +268,23 @@ function renderEditorFields(moduleKey, draft, handleFieldChange, contentRef, han
         <>
           <div className="design-field-row">
             <TextField label="用户名">
-              <input value={draft.title ?? ''} onChange={(event) => handleFieldChange('title', event.target.value)} />
+              <input value={draft.title ?? ''} onChange={(event) => handleFieldChange('title', event.target.value)} placeholder="登录用" />
             </TextField>
-            <TextField label="角色">
-              <input value={draft.roleName ?? ''} onChange={(event) => handleFieldChange('roleName', event.target.value)} />
+            <TextField label="姓名">
+              <input value={draft.displayName ?? ''} onChange={(event) => handleFieldChange('displayName', event.target.value)} placeholder="真实姓名" />
             </TextField>
           </div>
+          <div className="design-field-row">
+            <TextField label="管理角色">
+              <input value={draft.roleName ?? ''} onChange={(event) => handleFieldChange('roleName', event.target.value)} placeholder="super_admin / editor" />
+            </TextField>
+            <TextField label="社团职务">
+              <input value={draft.position ?? ''} onChange={(event) => handleFieldChange('position', event.target.value)} placeholder="前端组组长 / 组员" />
+            </TextField>
+          </div>
+          <TextField label="一句话描述">
+            <textarea rows={2} value={draft.desc ?? ''} onChange={(event) => handleFieldChange('desc', event.target.value)} placeholder="例如：统筹全局，确保每一件事都有闭环。" />
+          </TextField>
           <TextField label="头像 URL">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <input
@@ -349,7 +364,7 @@ function renderSecondaryContent(moduleKey, filteredItems, selectedId, handleSele
     const rows = filteredItems.slice(0, 5)
     return (
       <>
-        <div className="table-head">头像      用户名      角色      创建日期</div>
+        <div className="table-head">头像      用户名      姓名      职务      创建日期</div>
         {rows.map((item) => {
           const { avatar, label } = formatUserRow(item)
           return (
@@ -452,7 +467,7 @@ function CollectionManagementPage({ moduleKey }) {
     }
 
     return items.filter((item) =>
-      [item.title, item.summary, item.author, item.owner, item.category, ...(item.tags ?? [])]
+      [item.title, item.summary, item.author, item.owner, item.category, item.displayName, item.position, item.desc, ...(item.tags ?? [])]
         .filter(Boolean)
         .some((value) => `${value}`.toLowerCase().includes(normalizedKeyword)),
     )

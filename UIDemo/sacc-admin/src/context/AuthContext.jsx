@@ -8,9 +8,11 @@ const DEV_MOCK_USER = {
   token: 'dev-mock-token',
   role: 'super_admin',
   userId: 'dev-user-001',
-  username: '林嘉禾',
+  username: 'admin',
   displayName: '林嘉禾',
-  avatar: '/uploads/avatars/default.png',
+  position: '前端组组长',
+  desc: '官网、组件库、工程化，一砖一瓦建起来。',
+  avatar: '/uploads/avatars/linjiahe.png',
   loginAt: new Date().toISOString(),
 }
 
