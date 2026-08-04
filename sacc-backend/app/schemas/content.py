@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, RootModel
 
 from app.schemas import APIModel
 
@@ -37,7 +37,7 @@ class ContentItemSummary(APIModel):
     title: str
     summary: str | None = None
     category: str | None = None
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     status: ContentStatus
     author: str | None = None
     author_avatar: str | None = None
@@ -57,8 +57,8 @@ class ContentListResponse(APIModel):
     pagination: Pagination
 
 
-class ContentItemResponse(APIModel):
-    data: ContentItem
+class ContentItemResponse(ContentItem):
+    """APIfox 内容详情响应的 data 类型。"""
 
 
 class UpsertContentRequest(APIModel):
@@ -68,7 +68,7 @@ class UpsertContentRequest(APIModel):
     summary: str | None = None
     body: str | None = None
     category: str | None = Field(default=None, max_length=64)
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     status: ContentStatus = ContentStatus.DRAFT
     author: str | None = Field(default=None, max_length=64)
     repo_url: str | None = Field(default=None, max_length=255)
@@ -125,7 +125,7 @@ class PageHero(APIModel):
 
 class FooterColumn(APIModel):
     title: str | None = None
-    links: list[NavItem] = []
+    links: list[NavItem] = Field(default_factory=list)
 
 
 class SocialLink(APIModel):
@@ -148,9 +148,9 @@ class SiteMeta(APIModel):
     domain: str | None = None
     public_ip: str | None = None
     email: str | None = None
-    footer_stats: list[StatItem] = []
-    footer_columns: list[FooterColumn] = []
-    social_links: list[SocialLink] = []
+    footer_stats: list[StatItem] = Field(default_factory=list)
+    footer_columns: list[FooterColumn] = Field(default_factory=list)
+    social_links: list[SocialLink] = Field(default_factory=list)
     cta: CtaSection | None = None
 
 
@@ -168,12 +168,12 @@ class HomePageData(APIModel):
     eyebrow: str | None = None
     title: str | None = None
     subtitle: str | None = None
-    hero_actions: list[HeroAction] = []
-    stats: list[StatItem] = []
-    highlights: list[Highlight] = []
-    testimonials: list[str] = []
-    partners: list[str] = []
-    resources: list[ResourceItem] = []
+    hero_actions: list[HeroAction] = Field(default_factory=list)
+    stats: list[StatItem] = Field(default_factory=list)
+    highlights: list[Highlight] = Field(default_factory=list)
+    testimonials: list[str] = Field(default_factory=list)
+    partners: list[str] = Field(default_factory=list)
+    resources: list[ResourceItem] = Field(default_factory=list)
 
 
 class TimelineItem(APIModel):
@@ -191,21 +191,21 @@ class MemberLeader(APIModel):
 class MemberGroup(APIModel):
     id: str | None = None
     name: str | None = None
-    leaders: list[MemberLeader] = []
-    members: list[str] = []
+    leaders: list[MemberLeader] = Field(default_factory=list)
+    members: list[str] = Field(default_factory=list)
 
 
 class MembersData(APIModel):
-    groups: list[MemberGroup] = []
+    groups: list[MemberGroup] = Field(default_factory=list)
 
 
 class AboutPageData(APIModel):
     hero: PageHero | None = None
-    mission_cards: list[CardItem] = []
-    capabilities: list[str] = []
-    values: list[CardItem] = []
-    timeline: list[TimelineItem] = []
-    honors: list[str] = []
+    mission_cards: list[CardItem] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    values: list[CardItem] = Field(default_factory=list)
+    timeline: list[TimelineItem] = Field(default_factory=list)
+    honors: list[str] = Field(default_factory=list)
     members: MembersData | None = None
 
 
@@ -219,10 +219,10 @@ class JoinPageData(APIModel):
     title: str | None = None
     subtitle: str | None = None
     group_number: str | None = None
-    timeline: list[JoinTimelineItem] = []
-    benefits: list[str] = []
-    tracks: list[CardItem] = []
-    requirements: list[str] = []
+    timeline: list[JoinTimelineItem] = Field(default_factory=list)
+    benefits: list[str] = Field(default_factory=list)
+    tracks: list[CardItem] = Field(default_factory=list)
+    requirements: list[str] = Field(default_factory=list)
 
 
 class ActivityItem(APIModel):
@@ -234,8 +234,8 @@ class ActivityItem(APIModel):
     category: str | None = None
     summary: str | None = None
     description: str | None = None
-    agenda: list[str] = []
-    outcomes: list[str] = []
+    agenda: list[str] = Field(default_factory=list)
+    outcomes: list[str] = Field(default_factory=list)
     link_label: str | None = None
 
 
@@ -253,13 +253,13 @@ class ProjectItem(APIModel):
     status: str | None = None
     repo_url: str | None = None
     description: str | None = None
-    architecture: list[str] = []
-    tech_stack: list[str] = []
-    challenges: list[str] = []
+    architecture: list[str] = Field(default_factory=list)
+    tech_stack: list[str] = Field(default_factory=list)
+    challenges: list[str] = Field(default_factory=list)
     code_sample: str | None = None
-    roadmap: list[str] = []
-    awards: list[str] = []
-    team: list[ProjectMember] = []
+    roadmap: list[str] = Field(default_factory=list)
+    awards: list[str] = Field(default_factory=list)
+    team: list[ProjectMember] = Field(default_factory=list)
 
 
 class NewsItem(APIModel):
@@ -272,7 +272,7 @@ class NewsItem(APIModel):
     role: str | None = None
     date: str | None = None
     read_minutes: int | None = None
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     summary: str | None = None
     content: str | None = None
 
@@ -301,9 +301,9 @@ class TeamIntro(APIModel):
 
 class TeamPageData(APIModel):
     intro: TeamIntro | None = None
-    leadership: list[TeamMember] = []
-    technical: list[TeamMember] = []
-    non_technical: list[TeamMember] = []
+    leadership: list[TeamMember] = Field(default_factory=list)
+    technical: list[TeamMember] = Field(default_factory=list)
+    non_technical: list[TeamMember] = Field(default_factory=list)
 
 
 class GalleryAlbum(APIModel):
@@ -320,8 +320,8 @@ class GalleryArchiveYear(APIModel):
 
 
 class GalleryData(APIModel):
-    albums: list[GalleryAlbum] = []
-    archive_years: list[GalleryArchiveYear] = []
+    albums: list[GalleryAlbum] = Field(default_factory=list)
+    archive_years: list[GalleryArchiveYear] = Field(default_factory=list)
 
 
 class FAQItem(APIModel):
@@ -331,20 +331,57 @@ class FAQItem(APIModel):
 
 class BootstrapData(APIModel):
     site: SiteMeta | None = None
-    navigation: list[NavItem] = []
+    navigation: list[NavItem] = Field(default_factory=list)
     home: HomePageData | None = None
     about: AboutPageData | None = None
     join: JoinPageData | None = None
-    activities: list[ActivityItem] = []
-    projects: list[ProjectItem] = []
-    news: list[NewsItem] = []
-    docs: list[DocItem] = []
+    activities: list[ActivityItem] = Field(default_factory=list)
+    projects: list[ProjectItem] = Field(default_factory=list)
+    news: list[NewsItem] = Field(default_factory=list)
+    docs: list[DocItem] = Field(default_factory=list)
     team: TeamPageData | None = None
     gallery: GalleryData | None = None
-    faq: list[FAQItem] = []
+    faq: list[FAQItem] = Field(default_factory=list)
+
+
+class DashboardTrafficPoint(APIModel):
+    date: str | None = None
+    visits: int | None = None
+
+
+class DashboardContentCounts(APIModel):
+    news: int | None = None
+    docs: int | None = None
+    projects: int | None = None
+    users: int | None = None
+
+
+class DashboardPendingCounts(APIModel):
+    news: int | None = None
+    docs: int | None = None
+    projects: int | None = None
+    users: int | None = None
+
+
+class AuditLogEntry(APIModel):
+    id: int
+    actor: str
+    module: str
+    action: str
+    detail: str
+    created_at: datetime
 
 
 class DashboardData(APIModel):
+    site_visits: int
+    active_members: int
+    content_counts: DashboardContentCounts
+    pending_counts: DashboardPendingCounts
+    traffic_trend: list[DashboardTrafficPoint] = Field(default_factory=list)
+    recent_audit_logs: list[AuditLogEntry] = Field(default_factory=list)
+
+
+class DashboardResponse(APIModel):
     site_visits: int
     active_members: int
     news_count: int
@@ -352,10 +389,6 @@ class DashboardData(APIModel):
     projects_count: int
     pending_news: int
     draft_docs: int
-
-
-class DashboardResponse(APIModel):
-    data: DashboardData
 
 
 class AuditAction(str, Enum):
@@ -373,8 +406,8 @@ class AuditLogItem(APIModel):
     timestamp: datetime
 
 
-class AuditLogResponse(APIModel):
-    data: list[AuditLogItem]
+class AuditLogResponse(RootModel[list[AuditLogItem]]):
+    """APIfox 审计日志列表的 data 类型。"""
 
 
 class UploadData(APIModel):
@@ -385,8 +418,10 @@ class UploadData(APIModel):
 
 
 class UploadResponse(APIModel):
-    data: UploadData
+    url: str
+    filename: str
+    size: int
+    uploaded_at: datetime
 
 
 JsonObject = dict[str, Any]
-

@@ -19,6 +19,6 @@ async def change_user_password(
     old_password: str,
     new_password: str,
 ) -> None:
-    # TODO: 校验旧密码，保存新密码的 bcrypt 哈希，并撤销旧令牌。
+    # TODO: 校验旧密码，保存新密码的 bcrypt 哈希，但不使当前 Token 失效。
     _ = db, user, old_password, new_password
     raise NotImplementedError

@@ -1,81 +1,50 @@
-# SACC.com
+# SACC Backend
 
-SACC 官网项目已经从“前端读取设计稿运行”升级为一个可继续扩展的全栈工程骨架。
+南京邮电大学计算机学院科协官网的 FastAPI 后端骨架。目录分层依据 `飞书.md`，接口路径、HTTP 方法、参数和主要 Schema 以 Apifox `SACC API v1.0.0` 为准。
 
-## 当前结构
+当前阶段只搭设架构：所有业务路由均已注册，但处理函数会返回 `501 Not Implemented`。每个处理函数及 `services/`、`utils/` 中都保留了具体实现要求的 `TODO`。
 
-- `sacc-home/`
-  官网前台，React + Vite，已经改为显式路由 + 稳定内容模型，支持从后端 `bootstrap` 接口读取站点配置，并在接口不可用时自动回退到本地兜底内容。
-- `sacc-admin/`
-  现阶段的后台前端原型，保留原有管理页界面，用于后续逐步接入服务端 API。
-- `server/`
-  Gin + Gorm + Redis + MySQL 的后端骨架，包含配置加载、鉴权、内容 CRUD、健康检查、中间件和种子数据。
-- `deploy/`
-  Docker Compose、API Dockerfile、Nginx 反向代理配置。
-- `docs/`
-  设计对照审计、技术栈说明和项目说明。
+## 规范差异
 
-## 已完成的关键修正
+飞书策划案与 Apifox 存在冲突时采用 Apifox：
 
-1. 官网不再运行时依赖 `SACC.pen` 解析路由和交互。
-2. 首页、关于、活动、项目、团队、动态、相册、FAQ、加入我们均改成显式组件页面。
-3. 官网前台已经接入 API 预留口：`VITE_API_BASE_URL + /api/v1/public/bootstrap`。
-4. 后端补齐 Gin + Gorm + Redis + MySQL 基础能力，并通过本地构建验证。
-5. 文档和部署配置补齐，便于后续上线到 `sacchome.ttdr.top.ttdr.top` / `123.56.221.147`。
+- 健康检查为 `GET /healthz` 和 `GET /readyz`。
+- 内容排序为 `PUT /api/v1/admin/content/reorder`。
+- 同时包含 Apifox 中的 `GET /api/v1/public/members` 和 `POST /api/v1/admin/upload`。
+- 成功响应统一使用 `{ code, message, data }` 包络；列表接口的数组位于 `data` 内。
+- 修改密码成功后当前 Token 仍然有效，不进行强制撤销。
 
-## 本地启动
-
-### 官网前台
-
-```bash
-cd sacc-home
-npm install
-npm run dev
-```
-
-### 管理端
-
-```bash
-cd sacc-admin
-npm install
-npm run dev
-```
-
-### 后端 API
+## 本地运行
 
 ```bash
 cp .env.example .env
-cd server
-go run ./cmd/api
+docker compose up --build
 ```
 
-### 生产部署
+服务地址为 `http://localhost:8000`，Swagger UI 为 `http://localhost:8000/docs`。MySQL 首次创建数据卷时会自动执行 `database-scripts/001_init.sql`。
+
+不使用 Docker 时：
 
 ```bash
-cp .env.example .env
-docker compose -f deploy/docker-compose.yml up -d --build
+python3.11 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app.main:app --reload
 ```
 
-启动后：
+## 数据库
 
-- `/` 为官网前台
-- `/admin/` 为管理后台
-- `/api/` 为后端 API
-- `/healthz` 与 `/readyz` 为健康检查
+初始化脚本创建 `users`、`content`、`audit_log` 三张核心表，并补充 API 实际需要的成员分组、内容分类、作者关联、封面图和检索索引。脚本不写入默认管理员，避免仓库内出现共享初始密码；认证实现阶段应提供一次性管理员初始化命令。
 
-## 验证结果
+后续结构变更使用 Alembic：
 
-- `cd sacc-home && npm test`
-- `cd sacc-home && npm run build`
-- `cd sacc-admin && npm run build`
-- `cd server && go test ./...`
-- `cd server && go build ./cmd/api`
-- `docker compose -f deploy/docker-compose.yml config`
+```bash
+alembic revision --autogenerate -m "describe change"
+alembic upgrade head
+```
 
-更完整的上线说明见 [deployment.md](/d:/SACC/SACC_Woc/Front_UI/SACC.com/docs/deployment.md)。
+## 验证
 
-## 下一步建议
-
-- 把 `sacc-admin` 从 `localStorage` 原型逐步切换到 `server/` 提供的鉴权和内容接口。
-- 补正式 RBAC、刷新令牌、审计日志写入链路和 SQL 迁移版本管理。
-- 将设计资源迁移到独立 `design/` 目录，进一步收敛根目录结构。
+```bash
+pytest
+python -m compileall app tests
+```

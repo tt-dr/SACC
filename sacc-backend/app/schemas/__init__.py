@@ -1,3 +1,5 @@
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -14,9 +16,22 @@ class APIModel(BaseModel):
     )
 
 
+DataT = TypeVar("DataT")
+
+
+class Result(APIModel, Generic[DataT]):
+    """APIfox 统一成功响应包络。"""
+
+    code: int
+    message: str
+    data: DataT
+
+
 class MessageResponse(APIModel):
     message: str
 
 
-__all__ = ["APIModel", "MessageResponse"]
+EmptyResult = Result[None]
 
+
+__all__ = ["APIModel", "DataT", "EmptyResult", "MessageResponse", "Result"]
