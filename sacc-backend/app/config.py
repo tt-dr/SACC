@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_upload_size: int = 10 * 1024 * 1024
 
+    oss_endpoint: str | None = None
+    oss_access_key_id: str | None = None
+    oss_access_key_secret: str | None = None
+    oss_bucket_name: str | None = None
+    oss_bucket_prefix: str = "sacc/"
+    oss_public_base_url: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -36,4 +43,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-

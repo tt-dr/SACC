@@ -9,6 +9,12 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:-replace-this-before-production}"
       UPLOAD_DIR: "/app/uploads"
+      OSS_ENDPOINT: "${OSS_ENDPOINT:-}"
+      OSS_ACCESS_KEY_ID: "${OSS_ACCESS_KEY_ID:-}"
+      OSS_ACCESS_KEY_SECRET: "${OSS_ACCESS_KEY_SECRET:-}"
+      OSS_BUCKET_NAME: "${OSS_BUCKET_NAME:-}"
+      OSS_BUCKET_PREFIX: "${OSS_BUCKET_PREFIX:-sacc/}"
+      OSS_PUBLIC_BASE_URL: "${OSS_PUBLIC_BASE_URL:-}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -33,7 +39,7 @@ services:
       - --collation-server=utf8mb4_0900_ai_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./database-scripts:/docker-entrypoint-initdb.d:ro
+      - ../database-scripts:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
@@ -58,4 +64,3 @@ volumes:
   mysql_data:
   redis_data:
   uploads_data:
-

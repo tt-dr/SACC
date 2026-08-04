@@ -20,11 +20,11 @@ DataT = TypeVar("DataT")
 
 
 class Result(APIModel, Generic[DataT]):
-    """APIfox 统一成功响应包络。"""
+    """APIfox 统一响应包络。"""
 
     code: int
     message: str
-    data: DataT
+    data: DataT | None
 
 
 class MessageResponse(APIModel):

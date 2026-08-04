@@ -1,17 +1,32 @@
-# SACC 后端 API 契约骨架
+# SACC FastAPI 后端
 
-> [!IMPORTANT]
-> `feature/api-contract` 分支只用于固化项目目录、API 路由、请求/响应模型与数据库表结构等项目契约，不用于实际功能开发或生产部署。
+本分支在 API 契约骨架上实现了管理端内容管理和阿里云 OSS 图片上传：
 
-当前业务逻辑仅保留接口骨架和中文 `TODO` 实现要求；未实现的接口会返回 `501 Not Implemented`。契约确认后，请从适当的开发分支实现业务功能，不要直接在本分支继续功能开发。
+- 管理端内容列表、创建、更新和软删除；
+- `docs`、`projects` 内容排序；
+- JPG、PNG、GIF、WEBP 图片校验及阿里云 OSS 上传；
+- JWT 登录认证依赖；
+- 统一错误响应 `{ code, message, data }`，其中 HTTP 状态码始终与 `code` 一致。
 
-## 目录
+## 本地运行
 
-- `app/routers/`：按 API 规范组织的路由契约。
-- `app/schemas/`：请求和响应数据模型。
-- `app/models/`：数据库 ORM 模型。
-- `app/services/`：待实现的业务服务边界。
-- `alembic/`：数据库迁移骨架。
-- `tests/`：路由契约校验。
+```bash
+cp .env.example .env
+uv venv --python 3.11 --seed .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+source .venv/bin/activate
+uvicorn app.main:app --reload
+```
 
-数据库初始化脚本位于仓库根目录的 `database-scripts/001_init.sql`。
+## OSS 配置
+
+上传接口要求配置 `OSS_ENDPOINT`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET` 和 `OSS_BUCKET_NAME`。公共读 Bucket 建议配置 `OSS_PUBLIC_BASE_URL`；未配置时接口返回有效期一小时的临时签名 URL。
+
+生产环境应使用仅具备目标 Bucket 必要读写权限的 RAM 用户，不要提交真实 AccessKey。
+
+## 验证
+
+```bash
+python -m compileall app tests
+pytest -q
+```

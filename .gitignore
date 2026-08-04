@@ -5,6 +5,12 @@ dist/
 *.log
 .DS_Store
 
+# Python backend
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
 # 排除不需要提交的文件
 SACC.pen
 api-doc.md

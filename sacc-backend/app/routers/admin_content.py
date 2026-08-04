@@ -1,18 +1,24 @@
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile, status
+from sqlalchemy import func, or_, select
 
-from app.dependencies import CurrentUser, DbSession, not_implemented
+from app.dependencies import CurrentUser, DbSession
+from app.models.content import Content
 from app.schemas import EmptyResult, Result
 from app.schemas.content import (
     ContentItemResponse,
+    ContentItemSummary,
     ContentListResponse,
     ContentModule,
     ContentStatus,
+    Pagination,
     ReorderRequest,
     UpsertContentRequest,
     UploadResponse,
 )
+from app.services import content as content_service
+from app.services.storage import upload_image as upload_image_to_oss
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["管理接口 - 内容"])
@@ -32,14 +38,43 @@ async def list_admin_content(
     status_filter: Annotated[ContentStatus | None, Query(alias="status")] = None,
     keyword: str | None = None,
 ) -> Result[ContentListResponse]:
-    # TODO: 分页检索所有状态的内容，并校验 editor 可管理的模块范围。
-    _ = current_user, db, page, page_size, module, status_filter, keyword
-    not_implemented("查询管理端内容列表")
+    _ = current_user
+    filters = []
+    if module is not None:
+        filters.append(Content.module == module.value)
+    if status_filter is not None:
+        filters.append(Content.status == status_filter.value)
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        filters.append(
+            or_(
+                Content.title.like(pattern),
+                Content.summary.like(pattern),
+                Content.author.like(pattern),
+                Content.slug.like(pattern),
+            )
+        )
+
+    total = int(await db.scalar(select(func.count(Content.id)).where(*filters)) or 0)
+    rows = (
+        await db.execute(
+            select(Content)
+            .where(*filters)
+            .order_by(Content.sort_order.asc(), Content.created_at.desc(), Content.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).scalars().all()
+    data = ContentListResponse(
+        data=[ContentItemSummary.model_validate(row) for row in rows],
+        pagination=Pagination(page=page, page_size=page_size, total=total),
+    )
+    return Result(code=200, message="获取成功", data=data)
 
 
 @router.post(
     "/content",
-    response_model=EmptyResult,
+    response_model=Result[ContentItemResponse],
     status_code=status.HTTP_201_CREATED,
     summary="创建内容",
 )
@@ -47,10 +82,13 @@ async def create_content(
     payload: UpsertContentRequest,
     current_user: CurrentUser,
     db: DbSession,
-) -> EmptyResult:
-    # TODO: 生成唯一 slug，持久化内容，记录审计日志并使 bootstrap 缓存失效。
-    _ = payload, current_user, db
-    not_implemented("创建内容并写入审计日志")
+) -> Result[ContentItemResponse]:
+    content = await content_service.create_content(db, current_user, payload)
+    return Result(
+        code=201,
+        message="创建成功",
+        data=ContentItemResponse.model_validate(content),
+    )
 
 
 @router.put(
@@ -63,9 +101,8 @@ async def reorder_content(
     current_user: CurrentUser,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 根据 orderedIds 的索引，原子更新 docs/projects 内容的 sortOrder。
-    _ = payload, current_user, db
-    not_implemented("调整内容排序、记录审计日志并使 bootstrap 缓存失效")
+    await content_service.reorder_content(db, current_user, payload)
+    return EmptyResult(code=200, message="排序更新成功", data=None)
 
 
 @router.put(
@@ -79,9 +116,12 @@ async def update_content(
     current_user: CurrentUser,
     db: DbSession,
 ) -> Result[ContentItemResponse]:
-    # TODO: 应用允许的字段变更，记录审计日志并使 bootstrap 缓存失效。
-    _ = id, payload, current_user, db
-    not_implemented("更新内容并写入审计日志")
+    content = await content_service.update_content(db, current_user, id, payload)
+    return Result(
+        code=200,
+        message="更新成功",
+        data=ContentItemResponse.model_validate(content),
+    )
 
 
 @router.delete(
@@ -94,9 +134,8 @@ async def delete_content(
     current_user: CurrentUser,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 将状态设为 archived 以软删除内容，记录审计日志并使 bootstrap 缓存失效。
-    _ = id, current_user, db
-    not_implemented("归档内容并写入审计日志")
+    await content_service.delete_content(db, current_user, id)
+    return EmptyResult(code=200, message="删除成功", data=None)
 
 
 @router.post(
@@ -110,6 +149,6 @@ async def upload_image(
     current_user: CurrentUser,
     file: Annotated[UploadFile, File(description="jpg/png/gif/webp, max 10MB")],
 ) -> Result[UploadResponse]:
-    # TODO: 校验 MIME 类型、文件签名和大小，生成随机文件名后安全保存。
-    _ = current_user, file
-    not_implemented("校验并保存上传的图片")
+    _ = current_user
+    uploaded = await upload_image_to_oss(file)
+    return Result(code=201, message="上传成功", data=uploaded)

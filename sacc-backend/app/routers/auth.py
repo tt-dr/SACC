@@ -1,6 +1,6 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
-from app.dependencies import CurrentUser, DbSession, not_implemented
+from app.dependencies import CurrentUser, DbSession
 from app.schemas import EmptyResult, Result
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -8,6 +8,8 @@ from app.schemas.auth import (
     LoginResponse,
     MeResponse,
 )
+from app.services.auth import authenticate_user, change_user_password
+from app.utils.security import create_access_token
 
 
 router = APIRouter()
@@ -20,9 +22,23 @@ router = APIRouter()
     tags=["认证"],
 )
 async def login(payload: LoginRequest, db: DbSession) -> Result[LoginResponse]:
-    # TODO: 校验正常用户的 bcrypt 密码哈希，并签发有效期 12 小时的 JWT。
-    _ = payload, db
-    not_implemented("认证管理员并签发 JWT")
+    user = await authenticate_user(db, payload.username, payload.password)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+        )
+    data = LoginResponse(
+        user_id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        role=user.role,
+        position=user.position,
+        desc=user.desc,
+        avatar=user.avatar,
+        token=create_access_token(str(user.id), {"role": user.role.value}),
+    )
+    return Result(code=200, message="登录成功", data=data)
 
 
 @router.get(
@@ -32,9 +48,16 @@ async def login(payload: LoginRequest, db: DbSession) -> Result[LoginResponse]:
     tags=["管理接口 - 认证"],
 )
 async def get_me(current_user: CurrentUser) -> Result[MeResponse]:
-    # TODO: 序列化当前登录用户，响应中不得包含 password_hash。
-    _ = current_user
-    not_implemented("返回当前登录用户信息")
+    data = MeResponse(
+        user_id=current_user.id,
+        username=current_user.username,
+        display_name=current_user.display_name,
+        role=current_user.role,
+        position=current_user.position,
+        desc=current_user.desc,
+        avatar=current_user.avatar,
+    )
+    return Result(code=200, message="获取成功", data=data)
 
 
 @router.put(
@@ -48,6 +71,8 @@ async def change_password(
     current_user: CurrentUser,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 校验 oldPassword，使用 bcrypt 加密 newPassword，修改成功后不使当前 Token 失效。
-    _ = payload, current_user, db
-    not_implemented("修改密码，但保留当前令牌有效")
+    try:
+        await change_user_password(db, current_user, payload.old_password, payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return EmptyResult(code=200, message="密码修改成功", data=None)
