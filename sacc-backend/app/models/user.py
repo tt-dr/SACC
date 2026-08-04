@@ -34,7 +34,12 @@ class User(Base):
         default=UserRole.EDITOR,
     )
     position: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # API 契约对外使用 desc，数据库列仍保持已建立的 description 名称。
+    desc: Mapped[str | None] = mapped_column(
+        "description",
+        String(255),
+        nullable=True,
+    )
     member_group: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[UserStatus] = mapped_column(
         SqlEnum(

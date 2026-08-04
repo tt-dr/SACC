@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import Field
+from pydantic import Field, RootModel
 
 from app.schemas import APIModel
 from app.schemas.auth import UserRole
@@ -24,8 +24,8 @@ class UserItem(APIModel):
     created_at: datetime
 
 
-class UserListResponse(APIModel):
-    data: list[UserItem]
+class UserListResponse(RootModel[list[UserItem]]):
+    """APIfox 用户列表的 data 类型。"""
 
 
 class CreateUserRequest(APIModel):
@@ -46,4 +46,3 @@ class UpdateUserRequest(APIModel):
     position: str | None = Field(default=None, max_length=64)
     desc: str | None = Field(default=None, max_length=255)
     avatar: str | None = Field(default=None, max_length=255)
-

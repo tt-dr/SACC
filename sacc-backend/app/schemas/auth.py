@@ -25,13 +25,9 @@ class AuthUser(APIModel):
     avatar: str | None = None
 
 
-class LoginData(AuthUser):
+class LoginResponse(AuthUser):
     token: str
     expires_in: int = 43_200
-
-
-class LoginResponse(APIModel):
-    data: LoginData
 
 
 class ChangePasswordRequest(APIModel):
@@ -39,6 +35,5 @@ class ChangePasswordRequest(APIModel):
     new_password: str = Field(min_length=6)
 
 
-class MeResponse(APIModel):
-    data: AuthUser
-
+class MeResponse(AuthUser):
+    """APIfox 当前用户响应的 data 类型。"""
