@@ -11,6 +11,7 @@ from app.schemas.content import (
     ContentModule,
     MemberListResponse,
 )
+from app.services.user import list_public_members as fetch_public_members
 
 
 router = APIRouter(tags=["公开接口"])
@@ -50,10 +51,9 @@ async def get_public_content(id: int, db: DbSession) -> Result[ContentItemRespon
     response_model=Result[MemberListResponse],
     summary="获取成员列表",
 )
-async def list_members(db: DbSession) -> Result[MemberListResponse]:
-    # TODO: 按前端约定的稳定顺序对正常成员分组并返回。
-    _ = db
-    not_implemented("查询公开成员资料并分组")
+async def list_public_members(db: DbSession) -> Result[MemberListResponse]:
+    data = await fetch_public_members(db)
+    return Result(code=200, message="获取成员列表成功", data=data)
 
 
 @router.get(
