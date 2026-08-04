@@ -5,8 +5,9 @@
 - 管理端内容列表、创建、更新和软删除；
 - `docs`、`projects` 内容排序；
 - JPG、PNG、GIF、WEBP 图片校验及阿里云 OSS 上传；
-- JWT 登录认证依赖；
 - 统一错误响应 `{ code, message, data }`，其中 HTTP 状态码始终与 `code` 一致。
+
+登录、当前用户和密码接口仍保留在契约 TODO 范围内，本分支不实现这些接口。
 
 ## 本地运行
 
