@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
@@ -11,6 +11,7 @@ from app.schemas.content import (
     ContentModule,
     MemberListResponse,
 )
+from app.services.content import list_published_content
 from app.services.user import list_public_members as fetch_public_members
 
 
@@ -27,12 +28,17 @@ async def list_public_content(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=100)] = 20,
     module: ContentModule | None = None,
-    status_filter: Annotated[str, Query(alias="status")] = "published",
+    status: Annotated[Literal["published"], Query()] = "published",
     keyword: str | None = None,
 ) -> Result[ContentListResponse]:
-    # TODO: 分页检索已发布内容，并确保列表项不返回 body。
-    _ = db, page, page_size, module, status_filter, keyword
-    not_implemented("查询公开的已发布内容列表")
+    data = await list_published_content(
+        db,
+        page=page,
+        page_size=page_size,
+        module=module,
+        keyword=keyword,
+    )
+    return Result(code=200, message="获取成功", data=data)
 
 
 @router.get(
