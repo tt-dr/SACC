@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.dependencies import DbSession, SuperAdmin, not_implemented
 from app.schemas import EmptyResult, Result
 from app.schemas.user import CreateUserRequest, UpdateUserRequest, UserListResponse
+from app.services.user import list_admin_users
 
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
@@ -10,9 +11,8 @@ router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
 
 @router.get("", response_model=Result[UserListResponse], summary="用户列表")
 async def list_users(admin: SuperAdmin, db: DbSession) -> Result[UserListResponse]:
-    # TODO: 返回正常及已禁用用户，响应中不得包含 password_hash。
-    _ = admin, db
-    not_implemented("查询全部后台用户")
+    data = await list_admin_users(db)
+    return Result(code=200, message="获取用户列表成功", data=data)
 
 
 @router.post(

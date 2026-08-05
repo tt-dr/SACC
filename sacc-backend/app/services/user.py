@@ -3,10 +3,16 @@ from collections.abc import Sequence
 from pypinyin import lazy_pinyin
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.models.user import User, UserStatus
 from app.schemas.content import MemberListResponse, MemberPublicItem
-from app.schemas.user import CreateUserRequest, UpdateUserRequest
+from app.schemas.user import (
+    CreateUserRequest,
+    UpdateUserRequest,
+    UserItem,
+    UserListResponse,
+)
 
 
 def _group_sort_key(group: str) -> tuple[int, str]:
@@ -65,6 +71,30 @@ async def list_public_members(db: AsyncSession) -> MemberListResponse:
     )
     users = (await db.scalars(stmt)).all()
     return _build_public_members_response(users)
+
+
+async def list_admin_users(db: AsyncSession) -> UserListResponse:
+    """查询全部后台用户（含 disabled），按 id 升序返回。"""
+    stmt = (
+        select(User)
+        .options(
+            load_only(
+                User.username,
+                User.display_name,
+                User.avatar,
+                User.role,
+                User.position,
+                User.desc,
+                User.status,
+                User.created_at,
+            )
+        )
+        .order_by(User.id.asc())
+    )
+    users = (await db.scalars(stmt)).all()
+    return UserListResponse(
+        root=[UserItem.model_validate(user) for user in users]
+    )
 
 
 async def create_user(
