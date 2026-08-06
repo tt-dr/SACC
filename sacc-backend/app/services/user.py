@@ -1,7 +1,9 @@
 from collections.abc import Sequence
 
+from fastapi import HTTPException
 from pypinyin import lazy_pinyin
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
@@ -13,6 +15,22 @@ from app.schemas.user import (
     UserItem,
     UserListResponse,
 )
+from app.utils.security import hash_password
+
+
+# MySQL ER_DUP_ENTRY：唯一键/主键重复。
+_DUPLICATE_ENTRY_ERRNO = 1062
+
+
+def _is_duplicate_key_error(exc: IntegrityError) -> bool:
+    """判断 IntegrityError 是否属于数据库重复键错误。
+
+    仅将 MySQL 重复键错误码（1062）归类为 username 重复；其他完整性
+    错误（如非空、外键约束）不在此列，应由调用方继续抛出。
+    """
+    orig = exc.orig
+    args = getattr(orig, "args", ()) if orig is not None else ()
+    return bool(args) and args[0] == _DUPLICATE_ENTRY_ERRNO
 
 
 def _group_sort_key(group: str) -> tuple[int, str]:
@@ -102,9 +120,34 @@ async def create_user(
     actor: User,
     payload: CreateUserRequest,
 ) -> None:
-    # TODO: 校验 username 唯一性，加密密码，持久化并记录审计日志。
-    _ = db, actor, payload
-    raise NotImplementedError
+    # TODO: 接入公共审计日志组件（write_audit_log 尚未实现），届时使用 actor 记录操作者。
+    stmt = select(User.id).where(User.username == payload.username)
+    existing = (await db.scalars(stmt)).first()
+    if existing is not None:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+
+    try:
+        password_hash = hash_password(payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    user = User(
+        username=payload.username,
+        password_hash=password_hash,
+        display_name=payload.display_name or "",
+        role=payload.role,
+        position=payload.position,
+        desc=payload.desc,
+        avatar=payload.avatar,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if not _is_duplicate_key_error(exc):
+            raise
+        raise HTTPException(status_code=400, detail="用户名已存在") from exc
 
 
 async def update_user(

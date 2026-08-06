@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.dependencies import DbSession, SuperAdmin, not_implemented
 from app.schemas import EmptyResult, Result
 from app.schemas.user import CreateUserRequest, UpdateUserRequest, UserListResponse
+from app.services.user import create_user as create_admin_user
 from app.services.user import list_admin_users
 
 
@@ -25,9 +26,12 @@ async def create_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 校验 username 唯一性，使用 bcrypt 加密密码，持久化并记录创建操作。
-    _ = payload, admin, db
-    not_implemented("创建后台用户")
+    await create_admin_user(db, admin, payload)
+    return EmptyResult(
+        code=200,
+        message="创建成功",
+        data=None,
+    )
 
 
 @router.put("/{id}", response_model=EmptyResult, summary="修改用户")

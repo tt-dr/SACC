@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import Enum
+from typing import Annotated
 
-from pydantic import Field, RootModel
+from pydantic import Field, RootModel, StringConstraints, field_validator
 
 from app.schemas import APIModel
 from app.schemas.auth import UserRole
@@ -29,13 +30,24 @@ class UserListResponse(RootModel[list[UserItem]]):
 
 
 class CreateUserRequest(APIModel):
-    username: str = Field(min_length=1, max_length=64)
+    # 先去除首尾空白，再按去除后的长度校验（1~64），不做大小写转换。
+    username: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=64),
+    ]
     display_name: str | None = Field(default=None, max_length=64)
     password: str = Field(min_length=6)
     role: UserRole = UserRole.EDITOR
     position: str | None = Field(default=None, max_length=64)
     desc: str | None = Field(default=None, max_length=255)
     avatar: str | None = Field(default=None, max_length=255)
+
+    @field_validator("password")
+    @classmethod
+    def password_within_bcrypt_byte_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("密码过长：bcrypt 仅支持 72 字节以内的密码")
+        return value
 
 
 class UpdateUserRequest(APIModel):

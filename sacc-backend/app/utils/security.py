@@ -1,5 +1,6 @@
 from typing import Any
 
+import bcrypt
 from jose import jwt
 from jose.exceptions import JWTError
 
@@ -7,9 +8,14 @@ from app.config import settings
 
 
 def hash_password(password: str) -> str:
-    # TODO: 使用 bcrypt 和经过评审的明确工作因子对密码进行哈希。
-    _ = password
-    raise NotImplementedError
+    """使用 bcrypt（随机 salt）对密码进行哈希，返回可存储的字符串。"""
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        # 超过 72 字节时 bcrypt 5.x 会抛 ValueError。调用方应在入参校验阶段拦截，
+        # 或捕获本异常转换为明确的 4xx，避免未处理异常变成服务器 500。
+        raise ValueError("密码过长：bcrypt 仅支持 72 字节以内的密码")
+    password_hash = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+    return password_hash.decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
