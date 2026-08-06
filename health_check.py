@@ -4,36 +4,22 @@
 ===================================
 接口: GET /healthz
 Base URL: http://sacchome.ttdr.top.ttdr.top
-认证: JWT Bearer Token
 
-响应结构（来自 API 文档）:
+响应结构（来自 API 文档 — UIDemo/api-doc.json）:
     成功 (200):
         {
-            "code": 200,
-            "message": "检测通过",
-            "data": {
-                "status": "ok",
-                "time": "2026-07-16T12:00:00Z"
-            }
+            "status": "ok",
+            "time": "2026-07-16T12:00:00Z"
         }
-    失败 (非 200):
-        code   = HTTP 状态码
-        data   = null
-        message = 对应的错误描述
+
+    该端点无需认证，不依赖任何外部服务，直接返回服务是否存活。
 
 用法:
-    python health_check.py --token your-jwt-token
-    python health_check.py -t your-jwt-token
-
-    Token 也可通过环境变量传入:
-    set HEALTHZ_TOKEN=your-jwt-token        (CMD)
-    $env:HEALTHZ_TOKEN = "your-jwt-token"   (PowerShell)
-    export HEALTHZ_TOKEN="your-jwt-token"    (Git Bash / Linux)
     python health_check.py
+    python health_check.py --url http://localhost:8080
 """
 
 import argparse
-import os
 import sys
 import json
 import requests
@@ -43,14 +29,13 @@ import requests
 DEFAULT_BASE_URL = "http://sacchome.ttdr.top.ttdr.top"   # 默认服务地址
 HEALTHZ_PATH = "/healthz"                   # 存活探测路径
 REQUEST_TIMEOUT = 10                         # 请求超时（秒）
-TOKEN_ENV_VAR = "HEALTHZ_TOKEN"             # JWT Token 环境变量名
 
 
 # ── 状态码 → 语义说明映射 ──────────────────────────────────────────
 HTTP_STATUS_LABEL: dict[int, str] = {
     200: "请求成功",
     400: "请求错误",
-    401: "未授权 —— Token 无效或缺失",
+    401: "未授权",
     403: "禁止访问",
     404: "路径不存在",
     405: "方法不允许",
@@ -76,53 +61,31 @@ def status_label(http_code: int) -> str:
     return "未知状态"
 
 
-def build_headers(token: str | None) -> dict[str, str]:
-    """构建请求头，Authorization 为必需字段。"""
-    if not token:
-        raise ValueError(
-            f"缺少 JWT Token！请通过以下任一方式提供：\n"
-            f"  1) 命令行参数: python health_check.py --token <your-token>\n"
-            f"  2) 环境变量:   set {TOKEN_ENV_VAR}=<your-token>   (CMD)\n"
-            f"                 $env:{TOKEN_ENV_VAR} = \"<your-token>\"  (PowerShell)"
-        )
-    return {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
-
-
-def health_check(token: str, base_url: str = DEFAULT_BASE_URL) -> bool:
+def health_check(base_url: str = DEFAULT_BASE_URL) -> bool:
     """
     执行存活探测。
 
     根据 API 文档规范校验响应：
-      - code 字段必须与 HTTP 状态码一致
-      - 成功 (2xx): data 为 HealthResponse 对象
-      - 失败 (非 2xx): data 为 null
+      - 成功 (200): {"status": "ok", "time": "..."}
+      - 失败 (非 200): {"message": "..."}
 
     Args:
-        token:    JWT Bearer Token
         base_url: 服务基础地址
 
     Returns:
         True  探测通过
         False 探测失败
     """
-    # ── 1. 构建请求 ────────────────────────────────────────────────
-    headers = build_headers(token)
     url = f"{base_url.rstrip('/')}{HEALTHZ_PATH}"
 
-    # ── 2. 发起请求 ────────────────────────────────────────────────
     print("存活探测")
     print(f"   URL:  {url}")
-    masked = f"<{token[:8]}...>" if len(token) > 8 else f"<{token}>"
-    print(f"   Auth: Bearer {masked}")
     print()
 
     session = requests.Session()
 
     try:
-        response = session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        response = session.get(url, timeout=REQUEST_TIMEOUT)
     except requests.exceptions.ConnectionError:
         print(f"[ERROR] 连接失败 —— 无法访问 {url}")
         print(f"   请确认服务已启动，地址与端口正确。")
@@ -133,13 +96,9 @@ def health_check(token: str, base_url: str = DEFAULT_BASE_URL) -> bool:
     except requests.exceptions.RequestException as exc:
         print(f"[ERROR] 网络异常: {type(exc).__name__}: {exc}")
         return False
-    except ValueError as exc:
-        print(f"[ERROR] 配置错误: {exc}")
-        return False
     finally:
         session.close()
 
-    # ── 3. 解析响应体 ──────────────────────────────────────────────
     http_code = response.status_code
     reason = response.reason
 
@@ -148,53 +107,33 @@ def health_check(token: str, base_url: str = DEFAULT_BASE_URL) -> bool:
     except json.JSONDecodeError:
         body = None
 
-    # 按 API 文档提取三个顶层字段
-    body_code = body.get("code") if isinstance(body, dict) else None       # int, 必需
-    message   = body.get("message") if isinstance(body, dict) else None    # string, 必需
-    data      = body.get("data") if isinstance(body, dict) else None       # object | null, 必需
-
-    # ── 4. 输出 ────────────────────────────────────────────────────
     label = status_label(http_code)
     print(f"HTTP {http_code} {reason} —— {label}")
     print()
 
-    # 响应头
     print("Response Headers:")
     for key, value in response.headers.items():
         print(f"   {key}: {value}")
     print()
 
-    # 响应体（格式化 JSON）
     print("Response Body:")
     print(json.dumps(body, indent=2, ensure_ascii=False) if body else "(空)")
     print()
 
-    # ── 5. 协议级校验：code 字段 = HTTP 状态码 ─────────────────────
-    if body_code is not None and body_code != http_code:
-        print(f"[WARN] 协议异常: 响应体 code ({body_code}) != HTTP 状态码 ({http_code})")
-
-    # ── 6. 业务级判断 ──────────────────────────────────────────────
     if 200 <= http_code < 300:
-        # 成功：data 应为 HealthResponse 对象
-        if not isinstance(data, dict):
-            print(f"[WARN] 结构异常: 成功响应中 data 应为对象，实际为 {type(data).__name__}")
+        if not isinstance(body, dict):
+            print(f"[WARN] 结构异常: 响应体应为 JSON 对象")
             return False
 
-        status = data.get("status", "N/A")
-        server_time = data.get("time", "N/A")
-        msg = message or "N/A"
+        status = body.get("status", "N/A")
+        server_time = body.get("time", "N/A")
 
         print(f"[OK] 存活探测通过")
-        print(f"   message: {msg}")
         print(f"   status:  {status}")
         print(f"   time:    {server_time}")
         return True
     else:
-        # 失败：data 应为 null
-        if data is not None:
-            print(f"[WARN] 结构异常: 失败响应中 data 应为 null，实际: {data}")
-
-        msg = message or label
+        msg = body.get("message", label) if isinstance(body, dict) else label
         print(f"[ERROR] 存活探测失败 —— {msg}")
         return False
 
@@ -206,16 +145,9 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "示例:\n"
-            "  python health_check.py -t my-jwt-token\n"
-            "  python health_check.py --token my-jwt-token --url http://localhost:9090\n"
-            "\n"
-            "Token 也可通过环境变量 HEALTHZ_TOKEN 设置（命令行参数优先级更高）。"
+            "  python health_check.py\n"
+            "  python health_check.py --url http://localhost:8080\n"
         ),
-    )
-    parser.add_argument(
-        "-t", "--token",
-        default=os.getenv(TOKEN_ENV_VAR, ""),
-        help="JWT Bearer Token（可从环境变量 %(default)r 读取）",
     )
     parser.add_argument(
         "--url",
@@ -224,5 +156,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    success = health_check(token=args.token, base_url=args.url)
+    success = health_check(base_url=args.url)
     sys.exit(0 if success else 1)
