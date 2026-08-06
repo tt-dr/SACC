@@ -3,7 +3,7 @@
 存活探测（Health Check）HTTP 客户端
 ===================================
 接口: GET /healthz
-Base URL: http://localhost:8000
+Base URL: http://sacchome.ttdr.top.ttdr.top
 认证: JWT Bearer Token
 
 响应结构（来自 API 文档）:
@@ -40,7 +40,7 @@ import requests
 
 
 # ── 配置 ────────────────────────────────────────────────────────────
-DEFAULT_BASE_URL = "http://localhost:8000"   # 默认服务地址
+DEFAULT_BASE_URL = "http://sacchome.ttdr.top.ttdr.top"   # 默认服务地址
 HEALTHZ_PATH = "/healthz"                   # 存活探测路径
 REQUEST_TIMEOUT = 10                         # 请求超时（秒）
 TOKEN_ENV_VAR = "HEALTHZ_TOKEN"             # JWT Token 环境变量名
