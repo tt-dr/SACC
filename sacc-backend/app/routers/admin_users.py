@@ -5,6 +5,7 @@ from app.schemas import EmptyResult, Result
 from app.schemas.user import CreateUserRequest, UpdateUserRequest, UserListResponse
 from app.services.user import create_user as create_admin_user
 from app.services.user import list_admin_users
+from app.services.user import update_user as update_admin_user
 
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
@@ -41,9 +42,12 @@ async def update_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 更新请求中提供的字段，对非空密码进行哈希，并记录更新操作。
-    _ = id, payload, admin, db
-    not_implemented("更新后台用户")
+    await update_admin_user(db, admin, id, payload)
+    return EmptyResult(
+        code=200,
+        message="修改成功",
+        data=None,
+    )
 
 
 @router.delete("/{id}", response_model=EmptyResult, summary="禁用/删除用户")

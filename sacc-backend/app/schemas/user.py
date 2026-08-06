@@ -51,10 +51,26 @@ class CreateUserRequest(APIModel):
 
 
 class UpdateUserRequest(APIModel):
-    username: str | None = Field(default=None, min_length=1, max_length=64)
+    # 先去除首尾空白，再按去除后的长度校验（1~64），不做大小写转换。
+    username: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=64),
+    ] = None
     display_name: str | None = Field(default=None, max_length=64)
-    password: str | None = Field(default=None, min_length=6)
+    password: str | None = None
     role: UserRole | None = None
     position: str | None = Field(default=None, max_length=64)
     desc: str | None = Field(default=None, max_length=255)
     avatar: str | None = Field(default=None, max_length=255)
+
+    @field_validator("password")
+    @classmethod
+    def validate_update_password(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            # 未传、null 或空字符串均表示不修改密码。
+            return value
+        if len(value) < 6:
+            raise ValueError("密码长度不能少于 6 个字符")
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("密码过长：bcrypt 仅支持 72 字节以内的密码")
+        return value

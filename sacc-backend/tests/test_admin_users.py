@@ -18,9 +18,10 @@ from app.config import settings
 from app.database import get_db
 from app.main import app
 from app.models.user import User, UserRole, UserStatus
-from app.schemas.user import CreateUserRequest
+from app.schemas.user import CreateUserRequest, UpdateUserRequest
 from app.services.user import create_user as create_user_service
 from app.services.user import list_admin_users
+from app.services.user import update_user as update_user_service
 
 
 EXPECTED_USER_KEYS = {
@@ -1058,6 +1059,815 @@ async def test_create_user_route_end_to_end_with_mysql() -> None:
                 .where(User.username == duplicate_username)
             )
             assert duplicate_count == 1
+    finally:
+        if probe_ok:
+            async with test_session_maker() as cleanup_session:
+                await cleanup_session.execute(
+                    delete(User).where(User.username.in_(cleanup_usernames))
+                )
+                await cleanup_session.commit()
+        await test_engine.dispose()
+
+
+class _UpdateUserScalarResult:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def first(self) -> Any | None:
+        return self._rows[0] if self._rows else None
+
+
+class _UpdateUserFakeDb:
+    """修改用户接口专用 Fake Session：get/scalars/commit/rollback。"""
+
+    def __init__(
+        self,
+        users: list[User] | None = None,
+        *,
+        commit_error: BaseException | None = None,
+    ) -> None:
+        self._users = {user.id: user for user in (users or [])}
+        self.commit_error = commit_error
+        self.statements: list[Select[Any]] = []
+        self.committed = False
+        self.rolled_back = False
+
+    async def get(self, model: type[User], ident: int) -> User | None:
+        return self._users.get(ident)
+
+    async def scalars(self, stmt: Select[Any]) -> _UpdateUserScalarResult:
+        self.statements.append(stmt)
+        username = self._lookup_username(stmt)
+        if username is None:
+            return _UpdateUserScalarResult([])
+        for user in self._users.values():
+            if user.username == username:
+                return _UpdateUserScalarResult([user.id])
+        return _UpdateUserScalarResult([])
+
+    @staticmethod
+    def _lookup_username(stmt: Select[Any]) -> str | None:
+        """从查询条件中提取按 users.username 等值比较的字面值。"""
+        username_column = User.username.property.columns[0]
+        matches: list[Any] = []
+
+        def walk(node: Any) -> None:
+            if node is None:
+                return
+            if isinstance(node, BinaryExpression):
+                for left, right in (
+                    (node.left, node.right),
+                    (node.right, node.left),
+                ):
+                    if (
+                        isinstance(left, Column)
+                        and left.compare(username_column)
+                        and isinstance(right, BindParameter)
+                    ):
+                        matches.append(right.value)
+            for child in node.get_children():
+                walk(child)
+
+        walk(stmt.whereclause)
+        return matches[0] if matches else None
+
+    async def commit(self) -> None:
+        if self.commit_error is not None:
+            raise self.commit_error
+        self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+
+async def update_user_via_api(
+    token: str | None,
+    fake_db: _UpdateUserFakeDb,
+    user_id: Any,
+    payload: dict[str, Any] | None = None,
+) -> Response:
+    async def override_get_db() -> Any:
+        yield fake_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            return await client.put(
+                f"/api/v1/admin/users/{user_id}",
+                json=payload or {},
+                headers=headers,
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_super_admin_updates_user_profile_successfully() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a", display_name="旧名")
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {
+            "displayName": "新名字",
+            "role": "editor",
+            "position": "后端组组长",
+            "desc": "新简介",
+            "avatar": "/uploads/avatars/new.png",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "code": 200,
+        "message": "修改成功",
+        "data": None,
+    }
+    assert fake_db.committed
+    assert target.display_name == "新名字"
+    assert target.role == UserRole.EDITOR
+    assert target.position == "后端组组长"
+    assert target.desc == "新简介"
+    assert target.avatar == "/uploads/avatars/new.png"
+
+
+@pytest.mark.asyncio
+async def test_partial_update_only_changes_submitted_fields() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(
+        2,
+        username="editor_a",
+        role=UserRole.EDITOR,
+        display_name="旧名",
+    )
+    target.position = "负责人"
+    target.desc = "简介"
+    target.avatar = "/uploads/avatars/old.png"
+    target.password_hash = "old-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"displayName": "只改名字"},
+    )
+
+    assert resp.status_code == 200
+    assert target.display_name == "只改名字"
+    assert target.username == "editor_a"
+    assert target.role == UserRole.EDITOR
+    assert target.position == "负责人"
+    assert target.desc == "简介"
+    assert target.avatar == "/uploads/avatars/old.png"
+    assert target.password_hash == "old-hash"
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_explicit_null_username_role_display_name_are_ignored() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(
+        2,
+        username="editor_a",
+        role=UserRole.EDITOR,
+        display_name="旧名",
+    )
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"username": None, "role": None, "displayName": None},
+    )
+
+    assert resp.status_code == 200
+    assert target.username == "editor_a"
+    assert target.role == UserRole.EDITOR
+    assert target.display_name == "旧名"
+    assert fake_db.statements == []
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_empty_display_name_clears_the_field() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a", display_name="旧名")
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"displayName": ""},
+    )
+
+    assert resp.status_code == 200
+    assert target.display_name == ""
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_empty_payload_commits_without_changes() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(
+        2,
+        username="editor_a",
+        display_name="旧名",
+        role=UserRole.EDITOR,
+    )
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(make_token(sub="1"), fake_db, 2, {})
+
+    assert resp.status_code == 200
+    assert target.username == "editor_a"
+    assert target.role == UserRole.EDITOR
+    assert target.display_name == "旧名"
+    assert target.password_hash == "unused"
+    assert fake_db.statements == []
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_password_field_omitted_keeps_original_hash() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"displayName": "改名"},
+    )
+
+    assert resp.status_code == 200
+    assert target.password_hash == "original-hash"
+    assert fake_db.committed
+
+
+@pytest.mark.parametrize("password", [None, ""])
+@pytest.mark.asyncio
+async def test_password_not_submitted_or_empty_keeps_original(
+    password: Any,
+) -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+    payload: dict[str, Any] = {"displayName": "改名"}
+    if password is not None:
+        payload["password"] = password
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        payload,
+    )
+
+    assert resp.status_code == 200
+    assert target.password_hash == "original-hash"
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_valid_new_password_is_bcrypt_hashed_and_not_returned() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+    password = "newpass123"
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"password": password},
+    )
+
+    assert resp.status_code == 200
+    assert target.password_hash != "original-hash"
+    assert target.password_hash != password
+    assert bcrypt.checkpw(
+        password.encode("utf-8"),
+        target.password_hash.encode("utf-8"),
+    )
+    assert "password" not in resp.text.lower()
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_null_position_desc_avatar_clears_database_fields() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    target.position = "负责人"
+    target.desc = "简介"
+    target.avatar = "/uploads/avatars/old.png"
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"position": None, "desc": None, "avatar": None},
+    )
+
+    assert resp.status_code == 200
+    assert target.position is None
+    assert target.desc is None
+    assert target.avatar is None
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_username_trailing_whitespace_is_stripped() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"username": "  new_name  "},
+    )
+
+    assert resp.status_code == 200
+    assert target.username == "new_name"
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_updating_to_own_username_does_not_report_duplicate() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"username": "editor_a"},
+    )
+
+    assert resp.status_code == 200
+    assert target.username == "editor_a"
+    assert fake_db.committed
+    assert fake_db.statements == []
+
+
+@pytest.mark.parametrize("role", ["editor", "super_admin"])
+@pytest.mark.asyncio
+async def test_super_admin_can_change_role(role: str) -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a", role=UserRole.EDITOR)
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"role": role},
+    )
+
+    assert resp.status_code == 200
+    assert target.role.value == role
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_disabled_user_can_be_updated() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(
+        2,
+        username="disabled_editor",
+        status=UserStatus.DISABLED,
+    )
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"displayName": "禁用用户新名"},
+    )
+
+    assert resp.status_code == 200
+    assert target.display_name == "禁用用户新名"
+    assert fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_missing_target_user_returns_400_without_commit() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    fake_db = _UpdateUserFakeDb([admin])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        999,
+        {"displayName": "不存在"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": "用户不存在"}
+    assert not fake_db.committed
+    assert not fake_db.rolled_back
+
+
+@pytest.mark.asyncio
+async def test_username_taken_by_other_user_returns_400_without_commit() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a", display_name="旧名")
+    other = make_user(3, username="taken_name")
+    fake_db = _UpdateUserFakeDb([admin, target, other])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"username": "taken_name", "displayName": "不应生效"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": "用户名已存在"}
+    assert target.username == "editor_a"
+    assert target.display_name == "旧名"
+    assert not fake_db.committed
+    assert not fake_db.rolled_back
+
+
+@pytest.mark.asyncio
+async def test_commit_duplicate_key_error_rolls_back_and_returns_400() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    fake_db = _UpdateUserFakeDb(
+        [admin, target],
+        commit_error=IntegrityError(
+            "UPDATE users SET username=:username WHERE users.id = :id",
+            {"username": "race_user", "id": 2},
+            Exception(1062, "Duplicate entry 'race_user' for key 'username'"),
+        ),
+    )
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"username": "race_user"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": "用户名已存在"}
+    assert fake_db.rolled_back
+
+
+@pytest.mark.asyncio
+async def test_non_duplicate_integrity_error_is_re_raised_after_rollback() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    non_duplicate_error = IntegrityError(
+        "UPDATE users SET position=:position WHERE users.id = :id",
+        {"position": "x" * 100, "id": 2},
+        Exception(1406, "Data too long for column 'position'"),
+    )
+    fake_db = _UpdateUserFakeDb(
+        [admin, target],
+        commit_error=non_duplicate_error,
+    )
+    payload = UpdateUserRequest.model_construct(position="x" * 100)
+
+    with pytest.raises(IntegrityError) as exc_info:
+        await update_user_service(fake_db, admin, 2, payload)  # type: ignore[arg-type]
+
+    assert exc_info.value is non_duplicate_error
+    assert fake_db.rolled_back
+
+
+@pytest.mark.asyncio
+async def test_editor_cannot_update_user_returns_403() -> None:
+    editor = make_user(1, username="editor")
+    target = make_user(2, username="target")
+    fake_db = _UpdateUserFakeDb([editor, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"displayName": "越权修改"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json() == {"detail": "权限不足"}
+    assert target.display_name == "成员"
+    assert not fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_no_token_cannot_update_user_returns_401() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="target")
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(None, fake_db, 2, {"displayName": "匿名"})
+
+    assert resp.status_code == 401
+    assert target.display_name == "成员"
+    assert not fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_invalid_role_returns_422() -> None:
+    fake_db = _UpdateUserFakeDb([make_user(1, role=UserRole.SUPER_ADMIN)])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"role": "viewer"},
+    )
+
+    assert resp.status_code == 422
+    assert not fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_short_password_returns_422_and_keeps_hash() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="target")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"password": "12345"},
+    )
+
+    assert resp.status_code == 422
+    assert target.password_hash == "original-hash"
+    assert not fake_db.committed
+
+
+@pytest.mark.parametrize(
+    "password",
+    ["a" * 73, "密" * 25],
+)
+@pytest.mark.asyncio
+async def test_overlong_password_returns_422_and_keeps_hash(
+    password: str,
+) -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="target")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"password": password},
+    )
+
+    assert resp.status_code == 422
+    assert target.password_hash == "original-hash"
+    assert not fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_empty_string_password_is_accepted() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="target")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"password": ""},
+    )
+
+    assert resp.status_code == 200
+    assert target.password_hash == "original-hash"
+    assert fake_db.committed
+
+
+@pytest.mark.parametrize("username", ["", "   "])
+@pytest.mark.asyncio
+async def test_username_empty_after_strip_returns_422(username: str) -> None:
+    fake_db = _UpdateUserFakeDb([make_user(1, role=UserRole.SUPER_ADMIN)])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        2,
+        {"username": username},
+    )
+
+    assert resp.status_code == 422
+    assert not fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_non_integer_path_id_returns_422() -> None:
+    fake_db = _UpdateUserFakeDb([make_user(1, role=UserRole.SUPER_ADMIN)])
+
+    resp = await update_user_via_api(
+        make_token(sub="1"),
+        fake_db,
+        "abc",
+        {"displayName": "无效 id"},
+    )
+
+    assert resp.status_code == 422
+    assert not fake_db.committed
+
+
+def test_update_user_openapi_contract() -> None:
+    document = app.openapi()
+    operation = document["paths"]["/api/v1/admin/users/{id}"]["put"]
+
+    assert operation["summary"] == "修改用户"
+    assert "200" in operation["responses"]
+    assert "201" not in operation["responses"]
+    response_ref = operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    response_schema_name = response_ref.rsplit("/", 1)[-1]
+    response_properties = document["components"]["schemas"][response_schema_name][
+        "properties"
+    ]
+    assert set(response_properties) == {"code", "message", "data"}
+    assert {"password", "passwordHash", "password_hash"} & set(
+        response_properties
+    ) == set()
+
+    request_ref = operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]
+    request_schema_name = request_ref.rsplit("/", 1)[-1]
+    request_properties = document["components"]["schemas"][request_schema_name][
+        "properties"
+    ]
+    assert "displayName" in request_properties
+    assert "display_name" not in request_properties
+    assert {"passwordHash", "password_hash", "password_hash"} & set(
+        request_properties
+    ) == set()
+    assert set(request_properties) <= {
+        "username",
+        "displayName",
+        "password",
+        "role",
+        "position",
+        "desc",
+        "avatar",
+    }
+
+
+@pytest.mark.asyncio
+async def test_update_user_service_queries_only_user_id_by_username() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="editor_a")
+    fake_db = _UpdateUserFakeDb([admin, target])
+    payload = UpdateUserRequest(username="brand_new_name")
+
+    await update_user_service(fake_db, admin, 2, payload)  # type: ignore[arg-type]
+
+    assert len(fake_db.statements) == 1
+    sql = " ".join(
+        str(fake_db.statements[0].compile(dialect=mysql.dialect())).split()
+    )
+    assert "SELECT users.id FROM users" in sql
+    assert "WHERE users.username" in sql
+    assert "users.id != %s" in sql
+    assert "users.password_hash" not in sql
+
+
+@pytest.mark.asyncio
+async def test_update_user_service_rejects_overlong_password_with_422() -> None:
+    admin = make_user(1, role=UserRole.SUPER_ADMIN, username="admin")
+    target = make_user(2, username="target")
+    target.password_hash = "original-hash"
+    fake_db = _UpdateUserFakeDb([admin, target])
+    payload = UpdateUserRequest.model_construct(password="a" * 73)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_user_service(fake_db, admin, 2, payload)  # type: ignore[arg-type]
+
+    assert exc_info.value.status_code == 422
+    assert "72 字节" in exc_info.value.detail
+    assert target.password_hash == "original-hash"
+    assert not fake_db.committed
+
+
+@pytest.mark.asyncio
+async def test_update_user_route_end_to_end_with_mysql() -> None:
+    test_engine = create_async_engine(
+        "mysql+asyncmy://sacc:sacc_password@127.0.0.1:3306/sacc_test"
+        "?charset=utf8mb4",
+        pool_pre_ping=True,
+    )
+    test_session_maker = async_sessionmaker(
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    admin_username = f"e2e_update_admin_{uuid4().hex[:8]}"
+    target_username = f"e2e_update_target_{uuid4().hex[:8]}"
+    cleanup_usernames = [admin_username, target_username]
+    probe_ok = False
+    try:
+        async with test_session_maker() as probe:
+            try:
+                await probe.execute(text("SELECT 1"))
+            except Exception as exc:
+                pytest.skip(f"MySQL 不可用，跳过修改用户端到端测试：{exc!r}")
+        probe_ok = True
+
+        async with test_session_maker() as session:
+            admin = User(
+                username=admin_username,
+                password_hash="unused",
+                display_name="更新管理员",
+                role=UserRole.SUPER_ADMIN,
+                status=UserStatus.ACTIVE,
+            )
+            target = User(
+                username=target_username,
+                password_hash="old-hash",
+                display_name="旧名字",
+                role=UserRole.EDITOR,
+                status=UserStatus.ACTIVE,
+                position="旧职位",
+                desc="旧简介",
+                avatar="/uploads/avatars/old.png",
+            )
+            session.add_all([admin, target])
+            await session.flush()
+            token = make_token(
+                sub=str(admin.id),
+                jti=f"e2e-update-{uuid4().hex[:8]}",
+            )
+            password = "newpass123"
+
+            async def override_get_db() -> Any:
+                yield session
+
+            app.dependency_overrides[get_db] = override_get_db
+            try:
+                async with AsyncClient(
+                    transport=ASGITransport(app=app),
+                    base_url="http://test",
+                ) as client:
+                    resp = await client.put(
+                        f"/api/v1/admin/users/{target.id}",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={
+                            "displayName": "新名字",
+                            "role": "super_admin",
+                            "position": "主席团",
+                            "desc": "e2e 更新",
+                            "avatar": "/uploads/avatars/new.png",
+                            "password": password,
+                        },
+                    )
+            finally:
+                app.dependency_overrides.pop(get_db, None)
+
+            assert resp.status_code == 200
+            assert resp.json() == {
+                "code": 200,
+                "message": "修改成功",
+                "data": None,
+            }
+            await session.refresh(target)
+            assert target.display_name == "新名字"
+            assert target.role == UserRole.SUPER_ADMIN
+            assert target.position == "主席团"
+            assert target.desc == "e2e 更新"
+            assert target.avatar == "/uploads/avatars/new.png"
+            assert target.password_hash != password
+            assert bcrypt.checkpw(
+                password.encode("utf-8"),
+                target.password_hash.encode("utf-8"),
+            )
     finally:
         if probe_ok:
             async with test_session_maker() as cleanup_session:

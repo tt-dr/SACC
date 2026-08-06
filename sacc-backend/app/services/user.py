@@ -156,6 +156,49 @@ async def update_user(
     user_id: int,
     payload: UpdateUserRequest,
 ) -> None:
-    # TODO: 更新请求中提供的字段；如包含新密码则加密，并记录审计日志。
-    _ = db, actor, user_id, payload
-    raise NotImplementedError
+    # TODO: 公共审计日志组件实现后，在同一事务中记录 actor 的更新操作。
+    target = await db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=400, detail="用户不存在")
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    new_username = updates.get("username")
+    if isinstance(new_username, str) and new_username != target.username:
+        stmt = select(User.id).where(
+            User.username == new_username,
+            User.id != user_id,
+        )
+        existing = (await db.scalars(stmt)).first()
+        if existing is not None:
+            raise HTTPException(status_code=400, detail="用户名已存在")
+
+    new_password = updates.get("password")
+    if isinstance(new_password, str) and new_password != "":
+        try:
+            target.password_hash = hash_password(new_password)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    allowed_fields = {
+        "username",
+        "display_name",
+        "role",
+        "position",
+        "desc",
+        "avatar",
+    }
+    for key in allowed_fields:
+        value = updates.get(key)
+        if key in {"username", "display_name", "role"} and value is None:
+            continue
+        if key in updates:
+            setattr(target, key, value)
+
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if not _is_duplicate_key_error(exc):
+            raise
+        raise HTTPException(status_code=400, detail="用户名已存在") from exc
