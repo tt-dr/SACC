@@ -22,6 +22,23 @@ pnpm build      # 生产构建
 pnpm lint       # ESLint 检查
 ```
 
+> 若 3000 端口被占用，可指定端口：`pnpm exec next dev -p 3100`。
+
+## 后端接口接入
+
+前台站点数据唯一入口为 `GET /api/v1/public/bootstrap`（见 `src/lib/siteApi.ts`）。
+请求失败时自动回退到 `src/content/siteContent.ts` 的本地兜底数据。
+
+配置后端地址（`.env.local`，已 gitignore）：
+
+```bash
+API_BASE_URL=http://127.0.0.1:4523/m1/8593100-8371022-default
+```
+
+- 配置后请求 `${API_BASE_URL}/api/v1/public/bootstrap`
+- 未配置时使用相对路径 `/api/v1/...`（依赖同源代理）
+- 首页按 ISR 每 5 分钟重新验证（`export const revalidate = 300`）
+
 ## 目录结构
 
 ```

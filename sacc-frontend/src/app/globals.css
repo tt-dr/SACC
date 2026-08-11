@@ -135,3 +135,56 @@
   padding-inline: 1.5rem;
   max-width: 1240px;
 }
+
+@keyframes home-logo-sway {
+  0%,
+  100% {
+    transform: rotate(-2.2deg);
+  }
+  50% {
+    transform: rotate(2.2deg);
+  }
+}
+
+@keyframes home-glow-breathe {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.28;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.4;
+  }
+}
+
+@keyframes home-orb-breathe {
+  0%,
+  100% {
+    transform: scale(0.96);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.home-logo-sway {
+  transform-origin: right top;
+  animation: home-logo-sway 5.6s ease-in-out infinite;
+}
+
+.home-glow-breathe {
+  animation: home-glow-breathe 5.8s ease-in-out infinite;
+}
+
+.home-orb-breathe {
+  animation: home-orb-breathe 8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-logo-sway,
+  .home-glow-breathe,
+  .home-orb-breathe {
+    animation: none;
+  }
+}
