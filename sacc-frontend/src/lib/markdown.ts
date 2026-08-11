@@ -6,22 +6,38 @@ export interface TocEntry {
   level: 2 | 3;
 }
 
-export function slugifyHeading(text: string): string {
-  return text
+export function slugifyHeading(text: string, occurrence = 1): string {
+  const cleaned = text
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/\s+/g, "-");
+  const base = cleaned || "section";
+  return occurrence > 1 ? `${base}-${occurrence}` : base;
+}
+
+function normalizeHeadingText(raw: string): string {
+  return raw
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(^|[^*])\*([^*]+)\*/g, "$1$2")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .trim();
 }
 
 export function extractToc(markdown: string): TocEntry[] {
   const entries: TocEntry[] = [];
+  const counts = new Map<string, number>();
   for (const rawLine of markdown.split("\n")) {
     const match = /^(#{2,3})\s+(.+)$/.exec(rawLine.trim());
     if (!match) continue;
-    const text = match[2].trim();
+    const text = normalizeHeadingText(match[2]);
+    const occurrence = (counts.get(text) ?? 0) + 1;
+    counts.set(text, occurrence);
     entries.push({
-      id: slugifyHeading(text),
+      id: slugifyHeading(text, occurrence),
       text,
       level: match[1].length === 2 ? 2 : 3,
     });
@@ -45,4 +61,13 @@ export function childrenToText(node: ReactNode): string {
     return childrenToText((node as { props?: { children?: ReactNode } }).props?.children);
   }
   return "";
+}
+
+const SAFE_LINK_PATTERNS = [/^#/, /^\//, /^\?/, /^\.{1,2}\//, /^(?:https?:|mailto:)/i];
+
+export function isSafeLinkHref(href?: string): boolean {
+  if (!href) return false;
+  const trimmed = href.trim();
+  if (!trimmed) return false;
+  return SAFE_LINK_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
