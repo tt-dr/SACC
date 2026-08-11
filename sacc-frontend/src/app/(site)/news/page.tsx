@@ -1,12 +1,26 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
+import { PageHero } from "@/components/sections";
+import { NewsList } from "@/components/news/NewsList";
 
-export const metadata: Metadata = { title: "成员动态" };
+export const metadata: Metadata = {
+  title: "成员动态",
+  description: "SACC 成员发布的技术博客与成长记录，支持按作者筛选与关键词搜索。",
+};
 
 export default function NewsPage() {
   return (
-    <div className="container mx-auto px-4 py-16">
-      <h1 className="text-3xl font-bold">成员动态</h1>
-      <p className="mt-4 text-[#5a6780]">内容建设中...</p>
-    </div>
+    <>
+      <PageHero
+        eyebrow="Member Blog"
+        title="成员动态"
+        description="成员发布的技术博客与成长记录，按发布时间排序，支持按作者筛选与关键词搜索。"
+      />
+      <section className="py-10 sm:py-14">
+        <div className="container mx-auto px-4">
+          <NewsList />
+        </div>
+      </section>
+    </>
   );
 }
+
