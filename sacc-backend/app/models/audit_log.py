@@ -33,3 +33,4 @@ class AuditLog(Base):
         server_default=func.now(),
         index=True,
     )
+

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     upload_dir: str = "uploads"
     max_upload_size: int = 10 * 1024 * 1024
+    site_content_path: Path = (
+        Path(__file__).resolve().parent / "data" / "site_content.json"
+    )
 
     oss_endpoint: str | None = None
     oss_access_key_id: str | None = None
@@ -43,3 +47,4 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+

@@ -4,12 +4,10 @@ dist/
 .env.local
 *.log
 .DS_Store
-
-# Python backend
 __pycache__/
 *.py[cod]
-.pytest_cache/
 .venv/
+.pytest_cache/
 
 # 排除不需要提交的文件
 SACC.pen

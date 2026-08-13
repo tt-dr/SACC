@@ -11,6 +11,9 @@ from app.schemas.content import (
     ContentModule,
     MemberListResponse,
 )
+from app.services.cache import get_or_set_model
+from app.services.dashboard import record_site_visit
+from app.services.site import build_bootstrap
 
 
 router = APIRouter(tags=["公开接口"])
@@ -62,6 +65,11 @@ async def list_members(db: DbSession) -> Result[MemberListResponse]:
     summary="获取站点完整配置（前端唯一数据入口）",
 )
 async def get_bootstrap(db: DbSession) -> Result[BootstrapData]:
-    # TODO: 组装与 fallbackSiteContent 兼容的数据，并缓存 5 分钟。
-    _ = db
-    not_implemented("组装并缓存完整的站点启动数据")
+    await record_site_visit(db)
+    data = await get_or_set_model(
+        key="site:bootstrap",
+        ttl_seconds=300,
+        model_type=BootstrapData,
+        loader=lambda: build_bootstrap(db),
+    )
+    return Result(code=0, message="ok", data=data)

@@ -64,3 +64,15 @@ CREATE TABLE IF NOT EXISTS `audit_log` (
   KEY `idx_audit_log_created_at` (`created_at`),
   KEY `idx_audit_log_filter` (`module`, `actor`, `action`)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS `site_metrics` (
+  `key` VARCHAR(64) NOT NULL,
+  `value` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+    ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`key`)
+) ENGINE=InnoDB;
+
+INSERT INTO `site_metrics` (`key`, `value`)
+VALUES ('site_visits', 0)
+ON DUPLICATE KEY UPDATE `key` = VALUES(`key`);

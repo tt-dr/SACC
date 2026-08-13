@@ -1,6 +1,8 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
+from app.models.user import User, UserStatus
+from app.utils.security import hash_password, verify_password
 
 
 async def authenticate_user(
@@ -8,9 +10,15 @@ async def authenticate_user(
     username: str,
     password: str,
 ) -> User | None:
-    # TODO: 加载状态正常的用户，并使用 bcrypt 校验提交的密码。
-    _ = db, username, password
-    raise NotImplementedError
+    user = await db.scalar(
+        select(User).where(
+            User.username == username,
+            User.status == UserStatus.ACTIVE,
+        )
+    )
+    if user is None or not verify_password(password, user.password_hash):
+        return None
+    return user
 
 
 async def change_user_password(
@@ -19,6 +27,7 @@ async def change_user_password(
     old_password: str,
     new_password: str,
 ) -> None:
-    # TODO: 校验旧密码，保存新密码的 bcrypt 哈希，但不使当前 Token 失效。
-    _ = db, user, old_password, new_password
-    raise NotImplementedError
+    if not verify_password(old_password, user.password_hash):
+        raise ValueError("原密码不正确")
+    user.password_hash = hash_password(new_password)
+    await db.commit()

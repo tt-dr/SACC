@@ -1,9 +1,11 @@
-from datetime import datetime
+import asyncio
+from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 
-from app.dependencies import not_implemented
-from app.schemas import APIModel, Result
+from app.schemas import APIModel
+from app.services.health import check_mysql, check_redis
 
 
 class DependencyChecks(APIModel):
@@ -23,13 +25,30 @@ class ReadyResponse(HealthResponse):
 router = APIRouter(tags=["健康检查"])
 
 
-@router.get("/healthz", response_model=Result[HealthResponse], summary="存活探测")
-async def healthz() -> Result[HealthResponse]:
-    # TODO: 不检查外部依赖，直接返回 status=ok 和 UTC 服务器时间。
-    not_implemented("返回服务存活状态")
+@router.get("/healthz", response_model=HealthResponse, summary="存活探测")
+async def healthz() -> HealthResponse:
+    return HealthResponse(status="ok", time=datetime.now(timezone.utc))
 
 
-@router.get("/readyz", response_model=Result[ReadyResponse], summary="就绪检查")
-async def readyz() -> Result[ReadyResponse]:
-    # TODO: 探测 MySQL 和 Redis；任一依赖异常时返回 503 及 degraded 检查结果。
-    not_implemented("检查 MySQL 和 Redis 是否就绪")
+@router.get(
+    "/readyz",
+    response_model=ReadyResponse,
+    responses={503: {"model": ReadyResponse}},
+    summary="就绪检查",
+)
+async def readyz() -> ReadyResponse | JSONResponse:
+    mysql_up, redis_up = await asyncio.gather(check_mysql(), check_redis())
+    response = ReadyResponse(
+        status="ready" if mysql_up and redis_up else "degraded",
+        checks=DependencyChecks(
+            mysql="up" if mysql_up else "down",
+            redis="up" if redis_up else "down",
+        ),
+        time=datetime.now(timezone.utc),
+    )
+    if mysql_up and redis_up:
+        return response
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=response.model_dump(mode="json", by_alias=True),
+    )

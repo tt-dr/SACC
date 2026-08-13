@@ -56,6 +56,8 @@ def test_success_responses_use_apifox_result_envelope() -> None:
         for method, operation in path_item.items():
             if method not in {"get", "post", "put", "delete"}:
                 continue
+            if path in {"/healthz", "/readyz"}:
+                continue
             success = operation["responses"].get("200") or operation["responses"].get("201")
             assert success is not None, (method, path)
             schema = success["content"]["application/json"]["schema"]
@@ -69,3 +71,15 @@ def test_apifox_user_create_keeps_success_status_200() -> None:
     operation = app.openapi()["paths"]["/api/v1/admin/users"]["post"]
     assert "200" in operation["responses"]
     assert "201" not in operation["responses"]
+
+
+def test_health_responses_match_raw_apifox_contract() -> None:
+    document = app.openapi()
+    for path in ("/healthz", "/readyz"):
+        schema = document["paths"][path]["get"]["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        result_name = schema["$ref"].rsplit("/", 1)[-1]
+        properties = document["components"]["schemas"][result_name]["properties"]
+        assert "status" in properties
+        assert "code" not in properties

@@ -1,8 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import select
 
-from app.dependencies import DbSession, SuperAdmin, not_implemented
+from app.dependencies import DbSession, SuperAdmin
+from app.models.user import User
 from app.schemas import EmptyResult, Result
-from app.schemas.user import CreateUserRequest, UpdateUserRequest, UserListResponse
+from app.schemas.user import (
+    CreateUserRequest,
+    UpdateUserRequest,
+    UserItem,
+    UserListResponse,
+)
+from app.services import user as user_service
 
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
@@ -10,9 +18,25 @@ router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
 
 @router.get("", response_model=Result[UserListResponse], summary="用户列表")
 async def list_users(admin: SuperAdmin, db: DbSession) -> Result[UserListResponse]:
-    # TODO: 返回正常及已禁用用户，响应中不得包含 password_hash。
-    _ = admin, db
-    not_implemented("查询全部后台用户")
+    _ = admin
+    users = (await db.scalars(select(User).order_by(User.id))).all()
+    data = UserListResponse(
+        [
+            UserItem(
+                id=user.id,
+                username=user.username,
+                display_name=user.display_name,
+                avatar=user.avatar,
+                role=user.role.value,
+                position=user.position,
+                desc=user.desc,
+                status=user.status.value,
+                created_at=user.created_at,
+            )
+            for user in users
+        ]
+    )
+    return Result(code=0, message="ok", data=data)
 
 
 @router.post(
@@ -25,9 +49,11 @@ async def create_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 校验 username 唯一性，使用 bcrypt 加密密码，持久化并记录创建操作。
-    _ = payload, admin, db
-    not_implemented("创建后台用户")
+    try:
+        await user_service.create_user(db, admin, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return EmptyResult(code=0, message="用户创建成功", data=None)
 
 
 @router.put("/{id}", response_model=EmptyResult, summary="修改用户")
@@ -37,9 +63,11 @@ async def update_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 更新请求中提供的字段，对非空密码进行哈希，并记录更新操作。
-    _ = id, payload, admin, db
-    not_implemented("更新后台用户")
+    try:
+        await user_service.update_user(db, admin, id, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return EmptyResult(code=0, message="用户更新成功", data=None)
 
 
 @router.delete("/{id}", response_model=EmptyResult, summary="禁用/删除用户")
@@ -48,6 +76,10 @@ async def disable_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 禁止用户禁用自身；设置 status=disabled，撤销令牌并记录审计日志。
-    _ = id, admin, db
-    not_implemented("软删除后台用户")
+    try:
+        await user_service.disable_user(db, admin, id)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error))
+    return EmptyResult(code=0, message="用户已禁用", data=None)

@@ -13,3 +13,4 @@ pypinyin>=0.54,<1.0
 httpx>=0.28,<1.0
 pytest>=8.3,<10.0
 pytest-asyncio>=0.25,<2.0
+

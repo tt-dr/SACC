@@ -64,3 +64,4 @@ volumes:
   mysql_data:
   redis_data:
   uploads_data:
+

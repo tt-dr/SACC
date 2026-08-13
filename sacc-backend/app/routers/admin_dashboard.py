@@ -5,6 +5,8 @@ from fastapi import APIRouter, Query
 from app.dependencies import CurrentUser, DbSession, not_implemented
 from app.schemas import Result
 from app.schemas.content import AuditLogResponse, DashboardResponse
+from app.services.cache import get_or_set_model
+from app.services.dashboard import get_dashboard_stats
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["管理接口 - 仪表盘"])
@@ -19,9 +21,14 @@ async def get_dashboard(
     current_user: CurrentUser,
     db: DbSession,
 ) -> Result[DashboardResponse]:
-    # TODO: 聚合访问量、活跃成员数、各模块内容总数及草稿数。
-    _ = current_user, db
-    not_implemented("聚合并缓存仪表盘统计数据")
+    _ = current_user
+    data = await get_or_set_model(
+        key="admin:dashboard",
+        ttl_seconds=60,
+        model_type=DashboardResponse,
+        loader=lambda: get_dashboard_stats(db),
+    )
+    return Result(code=0, message="ok", data=data)
 
 
 @router.get(
