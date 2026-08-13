@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
@@ -11,6 +11,8 @@ from app.schemas.content import (
     ContentModule,
     MemberListResponse,
 )
+from app.services.content import list_published_content
+from app.services.user import list_public_members as fetch_public_members
 
 
 router = APIRouter(tags=["公开接口"])
@@ -26,12 +28,17 @@ async def list_public_content(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=100)] = 20,
     module: ContentModule | None = None,
-    status_filter: Annotated[str, Query(alias="status")] = "published",
+    status: Annotated[Literal["published"], Query()] = "published",
     keyword: str | None = None,
 ) -> Result[ContentListResponse]:
-    # TODO: 分页检索已发布内容，并确保列表项不返回 body。
-    _ = db, page, page_size, module, status_filter, keyword
-    not_implemented("查询公开的已发布内容列表")
+    data = await list_published_content(
+        db,
+        page=page,
+        page_size=page_size,
+        module=module,
+        keyword=keyword,
+    )
+    return Result(code=200, message="获取成功", data=data)
 
 
 @router.get(
@@ -50,10 +57,9 @@ async def get_public_content(id: int, db: DbSession) -> Result[ContentItemRespon
     response_model=Result[MemberListResponse],
     summary="获取成员列表",
 )
-async def list_members(db: DbSession) -> Result[MemberListResponse]:
-    # TODO: 按前端约定的稳定顺序对正常成员分组并返回。
-    _ = db
-    not_implemented("查询公开成员资料并分组")
+async def list_public_members(db: DbSession) -> Result[MemberListResponse]:
+    data = await fetch_public_members(db)
+    return Result(code=200, message="获取成员列表成功", data=data)
 
 
 @router.get(

@@ -3,6 +3,9 @@ from fastapi import APIRouter
 from app.dependencies import DbSession, SuperAdmin, not_implemented
 from app.schemas import EmptyResult, Result
 from app.schemas.user import CreateUserRequest, UpdateUserRequest, UserListResponse
+from app.services.user import create_user as create_admin_user
+from app.services.user import list_admin_users
+from app.services.user import update_user as update_admin_user
 
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
@@ -10,9 +13,8 @@ router = APIRouter(prefix="/api/v1/admin/users", tags=["管理接口 - 用户"])
 
 @router.get("", response_model=Result[UserListResponse], summary="用户列表")
 async def list_users(admin: SuperAdmin, db: DbSession) -> Result[UserListResponse]:
-    # TODO: 返回正常及已禁用用户，响应中不得包含 password_hash。
-    _ = admin, db
-    not_implemented("查询全部后台用户")
+    data = await list_admin_users(db)
+    return Result(code=200, message="获取用户列表成功", data=data)
 
 
 @router.post(
@@ -25,9 +27,12 @@ async def create_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 校验 username 唯一性，使用 bcrypt 加密密码，持久化并记录创建操作。
-    _ = payload, admin, db
-    not_implemented("创建后台用户")
+    await create_admin_user(db, admin, payload)
+    return EmptyResult(
+        code=200,
+        message="创建成功",
+        data=None,
+    )
 
 
 @router.put("/{id}", response_model=EmptyResult, summary="修改用户")
@@ -37,9 +42,12 @@ async def update_user(
     admin: SuperAdmin,
     db: DbSession,
 ) -> EmptyResult:
-    # TODO: 更新请求中提供的字段，对非空密码进行哈希，并记录更新操作。
-    _ = id, payload, admin, db
-    not_implemented("更新后台用户")
+    await update_admin_user(db, admin, id, payload)
+    return EmptyResult(
+        code=200,
+        message="修改成功",
+        data=None,
+    )
 
 
 @router.delete("/{id}", response_model=EmptyResult, summary="禁用/删除用户")

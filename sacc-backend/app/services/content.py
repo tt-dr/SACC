@@ -1,9 +1,10 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.audit_log import AuditAction
 from app.models.content import (
@@ -12,9 +13,179 @@ from app.models.content import (
     ContentStatus as ModelContentStatus,
 )
 from app.models.user import User
-from app.schemas.content import ReorderRequest, UpsertContentRequest
+from app.schemas.content import (
+    ContentItemSummary,
+    ContentListResponse,
+    ContentModule,
+    Pagination,
+    ReorderRequest,
+    UpsertContentRequest,
+)
 from app.utils.audit import write_audit_log
 from app.utils.slug import generate_slug
+
+
+LIKE_ESCAPE_CHAR = "\\"
+
+
+def _escape_like_pattern(keyword: str) -> str:
+    """转义 LIKE 通配符，避免用户输入 % 或 _ 改变搜索语义。"""
+    return (
+        keyword.replace(LIKE_ESCAPE_CHAR, LIKE_ESCAPE_CHAR * 2)
+        .replace("%", LIKE_ESCAPE_CHAR + "%")
+        .replace("_", LIKE_ESCAPE_CHAR + "_")
+    )
+
+
+def _build_keyword_condition(keyword: str, user_alias):
+    """构造标题/摘要/作者/展示名称/tags 的关键词 OR 条件。"""
+    escaped_keyword = _escape_like_pattern(keyword)
+    like_pattern = f"%{escaped_keyword}%"
+    fulltext = func.match(
+        Content.title,
+        Content.summary,
+        Content.author,
+    ).op("AGAINST")(
+        text("(:content_keyword IN NATURAL LANGUAGE MODE)").bindparams(
+            content_keyword=keyword,
+        )
+    )
+    return or_(
+        fulltext,
+        Content.title.like(like_pattern, escape=LIKE_ESCAPE_CHAR),
+        Content.summary.like(like_pattern, escape=LIKE_ESCAPE_CHAR),
+        Content.author.like(like_pattern, escape=LIKE_ESCAPE_CHAR),
+        user_alias.display_name.like(like_pattern, escape=LIKE_ESCAPE_CHAR),
+        func.json_search(Content.tags, "one", like_pattern).is_not(None),
+    )
+
+
+DB_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """naive datetime 按 Asia/Shanghai 解释，并统一转为 UTC 时区。"""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=DB_TIMEZONE)
+    return value.astimezone(timezone.utc)
+
+
+def _order_by_for(module: ContentModule | None):
+    if module == ContentModule.NEWS:
+        return [
+            Content.published_at.desc(),
+            Content.id.desc(),
+        ]
+    if module in {ContentModule.DOCS, ContentModule.PROJECTS}:
+        return [
+            Content.sort_order.asc(),
+            Content.published_at.desc(),
+            Content.id.desc(),
+        ]
+    return [
+        Content.published_at.desc(),
+        Content.created_at.desc(),
+        Content.id.desc(),
+    ]
+
+
+async def list_published_content(
+    db: AsyncSession,
+    *,
+    page: int,
+    page_size: int,
+    module: ContentModule | None,
+    keyword: str | None,
+) -> ContentListResponse:
+    stripped_keyword = keyword.strip() if keyword else ""
+
+    user_alias = aliased(User)
+    conditions = [Content.status == ModelContentStatus.PUBLISHED]
+    if module is not None:
+        conditions.append(Content.module == module)
+    if stripped_keyword:
+        conditions.append(
+            _build_keyword_condition(stripped_keyword, user_alias)
+        )
+
+    count_stmt = (
+        select(func.count(Content.id))
+        .join(
+            user_alias,
+            Content.author_user_id == user_alias.id,
+            isouter=True,
+        )
+        .where(*conditions)
+    )
+    total = await db.scalar(count_stmt)
+
+    columns = (
+        Content.id,
+        Content.module,
+        Content.slug,
+        Content.title,
+        Content.summary,
+        Content.category,
+        Content.tags,
+        Content.status,
+        func.coalesce(
+            func.nullif(func.trim(user_alias.display_name), ""),
+            Content.author,
+        ).label("author"),
+        func.coalesce(
+            func.nullif(func.trim(user_alias.avatar), ""),
+            Content.author_avatar,
+        ).label("author_avatar"),
+        Content.repo_url,
+        Content.sort_order,
+        Content.published_at,
+        Content.created_at,
+        Content.updated_at,
+    )
+    list_stmt = (
+        select(*columns)
+        .join(
+            user_alias,
+            Content.author_user_id == user_alias.id,
+            isouter=True,
+        )
+        .where(*conditions)
+        .order_by(*_order_by_for(module))
+        .limit(page_size)
+        .offset((page - 1) * page_size)
+    )
+    rows = (await db.execute(list_stmt)).all()
+
+    items = [
+        ContentItemSummary(
+            id=row.id,
+            module=row.module,
+            slug=row.slug,
+            title=row.title,
+            summary=row.summary,
+            category=row.category,
+            tags=row.tags,
+            status=row.status,
+            author=row.author,
+            author_avatar=row.author_avatar,
+            repo_url=row.repo_url,
+            sort_order=row.sort_order,
+            published_at=_as_utc(row.published_at),
+            created_at=_as_utc(row.created_at),
+            updated_at=_as_utc(row.updated_at),
+        )
+        for row in rows
+    ]
+    return ContentListResponse(
+        data=items,
+        pagination=Pagination(
+            page=page,
+            page_size=page_size,
+            total=total or 0,
+        ),
+    )
 
 
 def _slug_value(value: str) -> str:
