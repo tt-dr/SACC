@@ -7,12 +7,16 @@ interface NewsDetailSidebarProps {
   author: string;
   posts: NewsSummary[];
   currentSlug: string;
+  className?: string;
 }
 
-export function NewsDetailSidebar({ author, posts, currentSlug }: NewsDetailSidebarProps) {
+export function NewsDetailSidebar({ author, posts, currentSlug, className }: NewsDetailSidebarProps) {
   return (
     <aside
-      className="sticky top-[92px] hidden flex-col gap-5 rounded-[18px] border border-border bg-card p-5 shadow-[0_12px_24px_rgba(15,32,55,0.04)] lg:flex"
+      className={cn(
+        "flex-col gap-5 rounded-[18px] border border-border bg-card p-5 shadow-[0_12px_24px_rgba(15,32,55,0.04)]",
+        className,
+      )}
       aria-label="作者文章列表"
     >
       <Link

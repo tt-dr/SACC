@@ -120,7 +120,12 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
 
       <section className="py-8">
         <div className="container mx-auto grid grid-cols-1 items-start gap-7 px-4 lg:grid-cols-[240px_minmax(0,1fr)_220px]">
-          <NewsDetailSidebar author={post.author} posts={authorPosts} currentSlug={post.slug} />
+          <NewsDetailSidebar
+            author={post.author}
+            posts={authorPosts}
+            currentSlug={post.slug}
+            className="sticky top-[92px] hidden lg:flex"
+          />
 
           {toc.length > 0 ? (
             <details className="mb-5 rounded-[18px] border border-border bg-card p-4 lg:hidden">
@@ -169,6 +174,13 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
               {post.body}
             </ReactMarkdown>
           </article>
+
+          <NewsDetailSidebar
+            author={post.author}
+            posts={authorPosts}
+            currentSlug={post.slug}
+            className="flex lg:hidden"
+          />
 
           <NewsToc toc={toc} />
         </div>
