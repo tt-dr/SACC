@@ -23,61 +23,41 @@ import { MarkdownPreview } from "./MarkdownPreview";
 
 interface ModuleConfig {
   title: string;
-  subtitle: string;
   createLabel: string;
   saveLabel: string;
   searchPlaceholder: string;
   listTitle: string;
-  listHint: string;
-  listFoot: string;
   editorTitle: string;
-  editorHint: string;
   emptyText: string;
-  footerHint: string;
 }
 
 const MODULE_CONFIG: Record<ContentModule, ModuleConfig> = {
   docs: {
     title: "文档库管理",
-    subtitle: "维护项目文档与技术方案，拖拽排序，发布后同步到官网文档库",
     createLabel: "新建文档",
     saveLabel: "保存文档",
     searchPlaceholder: "搜索文档 / 分类",
     listTitle: "文档列表",
-    listHint: "字段：标题 / 分类 / 状态 / 更新时间，支持拖拽调整官网展示顺序",
-    listFoot: "拖拽排序松手即保存；文档更新后同步到官网文档库",
     editorTitle: "文档编辑",
-    editorHint: "使用 # 与 ## 标题组织结构，官网文档库会自动生成右侧目录",
     emptyText: "还没有文档，点击「新建文档」开始创建",
-    footerHint: "Markdown 预览已启用：支持 # 标题、**加粗**、- 列表、`代码` 与图片粘贴",
   },
   news: {
     title: "成员动态管理",
-    subtitle: "维护成员发布的技术博客，只有「已发布」状态才会在官网展示",
     createLabel: "新建博客",
     saveLabel: "保存并发布",
     searchPlaceholder: "搜索标题 / 作者 / 标签",
     listTitle: "成员博客列表",
-    listHint: "字段：标题 / 作者 / 状态 / 发布时间，可按状态筛选",
-    listFoot: "状态切换即保存；已下线内容在后台仍可见，可随时重新上架",
     editorTitle: "博客编辑",
-    editorHint: "维护博客标题、作者、摘要与正文，发布后同步到官网成员动态",
     emptyText: "还没有博客，点击「新建博客」开始创建",
-    footerHint: "Markdown 预览已启用：支持 # 标题、**加粗**、- 列表、`代码` 与图片粘贴",
   },
   projects: {
     title: "项目展示管理",
-    subtitle: "维护 GitHub 项目卡片，拖拽排序，下线后官网不再展示",
     createLabel: "新建项目",
     saveLabel: "保存项目",
     searchPlaceholder: "搜索项目名称",
     listTitle: "项目拖拽排序",
-    listHint: "拖动列表项即可调整项目在官网首页的展示顺序，顺序实时保存",
-    listFoot: "排序变更实时保存，立即同步到官网项目页",
     editorTitle: "项目卡片编辑",
-    editorHint: "维护项目名称、仓库链接、标签与进度",
     emptyText: "还没有项目，点击「新建项目」开始创建",
-    footerHint: "Markdown 预览已启用：支持 # 标题、**加粗**、- 列表、`代码`",
   },
 };
 
@@ -484,7 +464,6 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
     <section className="space-y-5">
       <div>
         <h1 className="text-[22px] font-bold text-[#111827]">{config.title}</h1>
-        <p className="mt-1 text-xs text-[#64748b]">{config.subtitle}</p>
       </div>
 
       {mockMode && (
@@ -534,7 +513,6 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <article className="rounded-xl border border-[#e7ecf4] bg-white p-5">
           <h2 className="text-sm font-bold text-[#132544]">{config.editorTitle}</h2>
-          <p className="mt-1 text-xs text-[#64748b]">{config.editorHint}</p>
 
           <div className="mt-4 space-y-3">
             {moduleKey === "news" && (
@@ -835,7 +813,6 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
 
       <article ref={listRef} className="rounded-xl border border-[#e7ecf4] bg-white p-5 scroll-mt-6">
         <h2 className="text-sm font-bold text-[#132544]">{config.listTitle}</h2>
-        <p className="mt-1 text-xs text-[#64748b]">{config.listHint}</p>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {STATUS_TABS.map((tab) => (
@@ -948,11 +925,9 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
         </div>
 
         <p className="mt-3 text-[11px] text-[#8a95a8]">
-          {config.listFoot} · 共 {filteredItems.length} 条
+          共 {filteredItems.length} 条
         </p>
       </article>
-
-      <p className="text-[11px] text-[#8a95a8]">{config.footerHint}</p>
     </section>
   );
 }
