@@ -193,6 +193,7 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const listRef = useRef<HTMLElement | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
 
   const showFeedback = useCallback((type: Feedback["type"], text: string) => {
@@ -509,7 +510,14 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }}
             placeholder={config.searchPlaceholder}
+            title="输入关键词后按回车，跳转到结果列表"
             className="h-9 w-full rounded-lg border border-[#e7ecf4] bg-white pl-9 pr-3 text-sm text-[#1d2638] outline-none transition-colors focus:border-[#ff7a00]"
           />
         </label>
@@ -825,7 +833,7 @@ export function ContentManagementPage({ moduleKey }: ContentManagementPageProps)
         </aside>
       </div>
 
-      <article className="rounded-xl border border-[#e7ecf4] bg-white p-5">
+      <article ref={listRef} className="rounded-xl border border-[#e7ecf4] bg-white p-5 scroll-mt-6">
         <h2 className="text-sm font-bold text-[#132544]">{config.listTitle}</h2>
         <p className="mt-1 text-xs text-[#64748b]">{config.listHint}</p>
 
