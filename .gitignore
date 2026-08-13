@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# 排除不需要提交的文件
+SACC.pen
+api-doc.md
