@@ -4,6 +4,8 @@ import { Card } from "@/components/sections/Card";
 import { SectionHeading } from "@/components/sections/SectionHeading";
 import { CTAButton } from "@/components/sections/CTAButton";
 import { StatsStrip } from "@/components/sections/StatsStrip";
+// TODO: 首页开发同学提交 ReadyToJoin 组件后，替换下方临时 CTA 卡片
+// import { ReadyToJoin } from "@/components/sections/ReadyToJoin";
 
 export const metadata: Metadata = { title: "加入我们" };
 
@@ -82,9 +84,10 @@ export default function JoinUsPage() {
         <StatsStrip stats={skills} />
       </section>
 
-      {/* 底部 CTA */}
+      {/* 底部 CTA - TODO: 替换为公共组件 ReadyToJoin（首页开发同学负责） */}
       <section className="py-16">
         <div className="container mx-auto px-4">
+          {/* 替换为：<ReadyToJoin /> */}
           <div className="rounded-lg bg-card p-8 text-center shadow-sm md:p-12">
             <h2 className="text-2xl font-bold text-primary sm:text-3xl">
               准备好加入我们了吗
