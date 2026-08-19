@@ -6,6 +6,8 @@ import { AdminDataProvider } from './context/AdminDataContext'
 import CollectionManagementPage from './pages/CollectionManagementPage'
 import DashboardPage from './pages/DashboardPage'
 import LoginPage from './pages/LoginPage'
+import ProjectsPage from './pages/ProjectsPage'
+import UsersPage from './pages/UsersPage'
 
 // 开发模式下 Vite base 为 /，Router basename 与之对齐；
 // 生产模式下两者均为 /admin/
@@ -21,10 +23,10 @@ function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AdminLayout />}>
                 <Route index element={<DashboardPage />} />
-                <Route path="users" element={<CollectionManagementPage moduleKey="users" />} />
+                <Route path="users" element={<UsersPage />} />
                 <Route path="docs" element={<CollectionManagementPage moduleKey="docs" />} />
                 <Route path="news" element={<CollectionManagementPage moduleKey="news" />} />
-                <Route path="projects" element={<CollectionManagementPage moduleKey="projects" />} />
+                <Route path="projects" element={<ProjectsPage />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate replace to="/" />} />
