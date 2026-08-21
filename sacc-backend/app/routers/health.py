@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
@@ -25,8 +25,8 @@ router = APIRouter(tags=["健康检查"])
 
 @router.get("/healthz", response_model=Result[HealthResponse], summary="存活探测")
 async def healthz() -> Result[HealthResponse]:
-    # TODO: 不检查外部依赖，直接返回 status=ok 和 UTC 服务器时间。
-    not_implemented("返回服务存活状态")
+    data = HealthResponse(status="ok", time=datetime.now(timezone.utc))
+    return Result(code=200, message="ok", data=data)
 
 
 @router.get("/readyz", response_model=Result[ReadyResponse], summary="就绪检查")

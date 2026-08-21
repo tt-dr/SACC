@@ -1,8 +1,9 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.dependencies import DbSession, not_implemented
+from app.models.content import Content, ContentStatus as ModelContentStatus
 from app.schemas import Result
 from app.schemas.content import (
     BootstrapData,
@@ -47,9 +48,14 @@ async def list_public_content(
     summary="获取单条内容详情",
 )
 async def get_public_content(id: int, db: DbSession) -> Result[ContentItemResponse]:
-    # TODO: 仅当内容已发布时返回包含完整 body 的详情。
-    _ = id, db
-    not_implemented("查询单条已发布内容")
+    content = await db.get(Content, id)
+    if content is None or content.status != ModelContentStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="内容不存在或未发布",
+        )
+    data = ContentItemResponse.model_validate(content)
+    return Result(code=200, message="获取成功", data=data)
 
 
 @router.get(

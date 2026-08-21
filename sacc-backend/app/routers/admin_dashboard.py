@@ -1,10 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Query
+from sqlalchemy import select
 
 from app.dependencies import CurrentUser, DbSession, not_implemented
+from app.models.audit_log import AuditLog
 from app.schemas import Result
-from app.schemas.content import AuditLogResponse, DashboardResponse
+from app.schemas.content import AuditLogItem, AuditLogResponse, DashboardResponse
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["管理接口 - 仪表盘"])
@@ -35,6 +37,24 @@ async def list_audit_log(
     db: DbSession,
     limit: Annotated[int, Query(ge=1, le=50)] = 12,
 ) -> Result[AuditLogResponse]:
-    # TODO: 按操作时间倒序返回最近的审计日志。
-    _ = current_user, db, limit
-    not_implemented("查询最近的审计日志")
+    rows = (
+        await db.execute(
+            select(AuditLog)
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    data = AuditLogResponse(
+        [
+            AuditLogItem(
+                id=row.id,
+                module=row.module,
+                action=row.action.value,
+                actor=row.actor,
+                detail=row.detail,
+                timestamp=row.created_at,
+            )
+            for row in rows
+        ]
+    )
+    return Result(code=200, message="获取成功", data=data)
