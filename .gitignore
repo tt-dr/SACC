@@ -8,3 +8,5 @@ dist/
 # 排除不需要提交的文件
 SACC.pen
 api-doc.md
+# 会议对齐文档（本地使用，不提交）
+PROJECT_PROGRESS.md
